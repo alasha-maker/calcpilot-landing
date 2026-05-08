@@ -232,7 +232,7 @@ export default function EngineeringAppLandingPage() {
           <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2">
             <div>
               <SectionLabel>Standards & Calculation Modes</SectionLabel>
-              <h2 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">Designed for Kahramaa submissions and IEC 60364 projects.</h2>
+              <h2 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">Designed for Kahramaa submissions and IEC projects.</h2>
               <p className="mt-5 text-lg leading-8 text-slate-600">
                 Switch between Kahramaa (Qatar) (official cable tables T10/T11) and IEC 60364 (resistivity method with dynamic derating). Use Custom Cable Data mode when manufacturer datasheets differ from standard tables.
               </p>
