@@ -110,6 +110,7 @@ export default function EngineeringAppLandingPage() {
 
           <div className="hidden items-center gap-8 text-sm font-medium text-slate-300 md:flex">
             <a href="#features" className="hover:text-white">Features</a>
+            <a href="#showcase" className="hover:text-white">Preview</a>
             <a href="#standards" className="hover:text-white">Standards</a>
             <a href="#pricing" className="hover:text-white">Pricing</a>
             <a href="#faq" className="hover:text-white">FAQ</a>
@@ -224,6 +225,72 @@ export default function EngineeringAppLandingPage() {
                   </Card>
                 );
               })}
+            </div>
+          </div>
+        </section>
+
+        <section id="showcase" className="bg-slate-950 px-6 py-24 text-white lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="mx-auto max-w-3xl text-center">
+              <SectionLabel>See It in Action</SectionLabel>
+              <h2 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">
+                Your full distribution network, calculated in one view.
+              </h2>
+              <p className="mt-5 text-lg leading-8 text-slate-400">
+                Real-time voltage drop calculation across your entire distribution hierarchy — from MDB down to final loads — with instant PASS / WARN / FAIL status per circuit.
+              </p>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
+              className="mt-16 flex justify-center"
+            >
+              <div
+                className="relative w-full max-w-6xl"
+                style={{ perspective: "1200px" }}
+              >
+                <div
+                  className="relative rounded-2xl border border-white/10 shadow-[0_40px_100px_-20px_rgba(34,211,238,0.25),0_20px_60px_-10px_rgba(0,0,0,0.8)]"
+                  style={{ transform: "rotateX(4deg) rotateY(-1deg)" }}
+                >
+                  {/* Fake browser chrome */}
+                  <div className="flex items-center gap-2 rounded-t-2xl border-b border-white/10 bg-slate-800 px-4 py-3">
+                    <span className="h-3 w-3 rounded-full bg-red-500/70" />
+                    <span className="h-3 w-3 rounded-full bg-yellow-500/70" />
+                    <span className="h-3 w-3 rounded-full bg-green-500/70" />
+                    <div className="mx-4 flex-1 rounded-md bg-slate-700 px-3 py-1 text-xs text-slate-400">
+                      app.sldvd.com / project / lv-distribution
+                    </div>
+                  </div>
+                  <div className="overflow-hidden rounded-b-2xl">
+                    <img
+                      src="/app-screenshot.png"
+                      alt="SLD·VD load manager showing full distribution hierarchy with voltage drop results"
+                      className="w-full object-cover"
+                      draggable={false}
+                    />
+                  </div>
+                  {/* Subtle edge glow */}
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
+                </div>
+              </div>
+            </motion.div>
+
+            <div className="mt-10 flex flex-wrap justify-center gap-6 text-sm text-slate-400">
+              {[
+                ["15", "Loads calculated"],
+                ["6", "Panels in hierarchy"],
+                ["4.49%", "Max VD tracked"],
+                ["Real-time", "PASS / WARN / FAIL"],
+              ].map(([val, label]) => (
+                <div key={label} className="flex flex-col items-center gap-1">
+                  <span className="text-2xl font-bold text-cyan-300">{val}</span>
+                  <span>{label}</span>
+                </div>
+              ))}
             </div>
           </div>
         </section>
