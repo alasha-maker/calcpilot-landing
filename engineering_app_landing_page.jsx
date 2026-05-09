@@ -117,8 +117,8 @@ export default function EngineeringAppLandingPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Button variant="ghost" className="hidden text-slate-200 hover:bg-white/10 hover:text-white md:inline-flex">Login</Button>
-            <Button className="rounded-2xl bg-cyan-400 text-slate-950 hover:bg-cyan-300">Start Trial</Button>
+            <a href="/login"><Button variant="ghost" className="hidden text-slate-200 hover:bg-white/10 hover:text-white md:inline-flex">Login</Button></a>
+            <a href="/signup"><Button className="rounded-2xl bg-cyan-400 text-slate-950 hover:bg-cyan-300">Start Trial</Button></a>
           </div>
         </nav>
       </header>
@@ -138,12 +138,12 @@ export default function EngineeringAppLandingPage() {
                 SLD·VD lets engineers build full distribution hierarchies, calculate voltage drop per Kahramaa or IEC 60364, auto-size cables and breakers, generate single-line diagrams, and produce professional client reports — all in a single workflow.
               </p>
               <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-                <Button size="lg" className="rounded-2xl bg-cyan-400 px-7 py-6 text-base font-semibold text-slate-950 hover:bg-cyan-300">
+                <a href="/signup"><Button size="lg" className="rounded-2xl bg-cyan-400 px-7 py-6 text-base font-semibold text-slate-950 hover:bg-cyan-300">
                   Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-                <Button size="lg" variant="outline" className="rounded-2xl border-white/20 bg-white/5 px-7 py-6 text-base font-semibold text-white hover:bg-white/10">
+                </Button></a>
+                <a href="mailto:support@calcpilot.cc"><Button size="lg" variant="outline" className="rounded-2xl border-white/20 bg-white/5 px-7 py-6 text-base font-semibold text-white hover:bg-white/10">
                   Request Demo
-                </Button>
+                </Button></a>
               </div>
               <div className="mt-8 flex flex-wrap gap-4 text-sm text-slate-400">
                 <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> Kahramaa (Qatar)</span>
@@ -359,9 +359,9 @@ export default function EngineeringAppLandingPage() {
                         </li>
                       ))}
                     </ul>
-                    <Button className={`mt-8 w-full rounded-2xl py-6 ${plan.highlight ? "bg-cyan-400 text-slate-950 hover:bg-cyan-300" : "bg-slate-950 text-white hover:bg-slate-800"}`}>
+                    <a href="/signup" className="block w-full"><Button className={`mt-8 w-full rounded-2xl py-6 ${plan.highlight ? "bg-cyan-400 text-slate-950 hover:bg-cyan-300" : "bg-slate-950 text-white hover:bg-slate-800"}`}>
                       {plan.cta}
-                    </Button>
+                    </Button></a>
                   </CardContent>
                 </Card>
               ))}
@@ -393,12 +393,12 @@ export default function EngineeringAppLandingPage() {
               From load schedule entry to Kahramaa-compliant voltage drop results, SLD diagrams, and client reports — one tool covers the full workflow.
             </p>
             <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
-              <Button size="lg" className="rounded-2xl bg-cyan-400 px-7 py-6 text-base font-semibold text-slate-950 hover:bg-cyan-300">
+              <a href="/signup"><Button size="lg" className="rounded-2xl bg-cyan-400 px-7 py-6 text-base font-semibold text-slate-950 hover:bg-cyan-300">
                 Start Free Trial
-              </Button>
-              <Button size="lg" variant="outline" className="rounded-2xl border-white/20 bg-white/5 px-7 py-6 text-base font-semibold text-white hover:bg-white/10">
+              </Button></a>
+              <a href="mailto:support@calcpilot.cc"><Button size="lg" variant="outline" className="rounded-2xl border-white/20 bg-white/5 px-7 py-6 text-base font-semibold text-white hover:bg-white/10">
                 Contact Sales
-              </Button>
+              </Button></a>
             </div>
           </div>
         </section>
