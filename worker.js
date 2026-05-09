@@ -46,6 +46,11 @@ export default {
       return handleAppAccess(request, env);
     }
 
+    // ── Temporary diagnostic endpoint — remove after debugging ──
+    if (path === '/debug-app') {
+      return handleAppDebug(request, env);
+    }
+
     if (path === '/webhook/paddle' && request.method === 'POST') {
       return handlePaddleWebhook(request, env);
     }
@@ -112,64 +117,105 @@ async function handleKeyDelivery(request, env, corsHeaders) {
 
 // ─── App Access — encrypt and serve ──────────────────────────────────────────
 async function handleAppAccess(request, env) {
-  const token = getSessionCookie(request);
-  if (!token) return Response.redirect('https://calcpilot.cc/login', 302);
+  try {
+    const token = getSessionCookie(request);
+    if (!token) return Response.redirect('https://calcpilot.cc/login', 302);
 
-  const user = await verifySupabaseToken(token, env);
-  if (!user) return Response.redirect('https://calcpilot.cc/login', 302);
+    const user = await verifySupabaseToken(token, env);
+    if (!user) return Response.redirect('https://calcpilot.cc/login', 302);
 
-  const subscription = await getSubscriptionStatus(user.id, env);
-  if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
-    return Response.redirect('https://calcpilot.cc/signup', 302);
-  }
-
-  const appFile = await env.APP_BUCKET.get('SLD_VoltDrop_Manager.html');
-  if (!appFile) {
-    return new Response('App unavailable. Please contact support@calcpilot.cc', { status: 404 });
-  }
-
-  const rawHtml = await appFile.text();
-
-  // ── Layer 4: Inject server-check heartbeat into the app HTML ────────────────
-  // This script lives INSIDE the app HTML before it is encrypted.
-  // Even if a user saves or extracts the decrypted HTML, this script fires on
-  // every page load and calls /auth/key. No valid session → immediate lock screen.
-  // Two consecutive network failures are tolerated (brief drops) before locking.
-  const heartbeat = `<script>(function(){var _f=0;function _v(){fetch('https://calcpilot.cc/auth/key',{method:'GET',credentials:'include'}).then(function(r){_f=0;if(!r.ok)_k()}).catch(function(){if(++_f>1)_k()})}function _k(){document.open();document.write('<!DOCTYPE html><html><body style="background:#0f172a;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:16px;text-align:center"><h2 style="color:#f87171;font-size:1.4rem">\\uD83D\\uDD12 Session Required<\\/h2><p style="color:#94a3b8;max-width:340px;line-height:1.6">This application requires an active CalcPilot subscription.<\\/p><a href="https://calcpilot.cc\\/login" style="padding:12px 28px;background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:600">Log In<\\/a><\\/body><\\/html>');document.close()}document.addEventListener('DOMContentLoaded',function(){_v();setInterval(_v,60000)})})()</script>`;
-
-  // Inject right after <head> if present, otherwise prepend to the document
-  const html = rawHtml.includes('<head>')
-    ? rawHtml.replace('<head>', '<head>' + heartbeat)
-    : heartbeat + rawHtml;
-
-  // Derive encryption key from session token
-  const key = await deriveKey(token);
-
-  // Encrypt the entire app HTML with AES-256-GCM
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoded = new TextEncoder().encode(html);
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-
-  // BUG FIX: use chunked base64 encoder.
-  // The old btoa(String.fromCharCode(...new Uint8Array(encrypted))) spreads ~400K
-  // bytes as function arguments, blowing the JS call stack (limit ~65K args).
-  // For a 298KB HTML file this was crashing the Worker silently every single time —
-  // meaning encryption was never working at all.
-  const encB64 = uint8ToBase64(new Uint8Array(encrypted));
-  const ivB64  = uint8ToBase64(iv);
-
-  const bootstrap = buildBootstrap(encB64, ivB64, user.email);
-
-  return new Response(bootstrap, {
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
-      'X-Frame-Options': 'SAMEORIGIN',
-      'X-Content-Type-Options': 'nosniff',
-      'Content-Security-Policy': "frame-ancestors 'self'",
-      'Referrer-Policy': 'no-referrer',
+    const subscription = await getSubscriptionStatus(user.id, env);
+    if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
+      return Response.redirect('https://calcpilot.cc/signup', 302);
     }
-  });
+
+    const appFile = await env.APP_BUCKET.get('SLD_VoltDrop_Manager.html');
+    if (!appFile) {
+      return new Response('App unavailable. Please contact support@calcpilot.cc', { status: 404 });
+    }
+
+    const rawHtml = await appFile.text();
+
+    // ── Layer 4: Inject server-check heartbeat into the app HTML ─────────────
+    // Lives INSIDE the HTML before encryption. Even if someone saves/extracts
+    // the decrypted HTML, this fires on every page load and calls /auth/key.
+    // Lock triggers immediately on the FIRST failed or unauthorized response.
+    const heartbeat = `<script>(function(){function _v(){fetch('https://calcpilot.cc/auth/key',{method:'GET',credentials:'include'}).then(function(r){if(!r.ok)_k()}).catch(function(){_k()})}function _k(){document.open();document.write('<!DOCTYPE html><html><body style="background:#0f172a;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:16px;text-align:center"><h2 style="color:#f87171;font-size:1.4rem">Session Required<\/h2><p style="color:#94a3b8;max-width:340px;line-height:1.6">This application requires an active CalcPilot subscription.<\/p><a href="https:\/\/calcpilot.cc\/login" style="padding:12px 28px;background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:600">Log In<\/a><\/body><\/html>');document.close()}document.addEventListener('DOMContentLoaded',function(){_v();setInterval(_v,55000)})})()\x3C/script>`;
+
+    const html = rawHtml.includes('<head>')
+      ? rawHtml.replace('<head>', '<head>' + heartbeat)
+      : heartbeat + rawHtml;
+
+    // Derive encryption key from session token
+    const key = await deriveKey(token);
+
+    // Encrypt the entire app HTML with AES-256-GCM
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(html);
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+
+    const encB64 = uint8ToBase64(new Uint8Array(encrypted));
+    const ivB64  = uint8ToBase64(iv);
+
+    const bootstrap = buildBootstrap(encB64, ivB64, user.email);
+
+    return new Response(bootstrap, {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+        'X-Frame-Options': 'SAMEORIGIN',
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "frame-ancestors 'self'",
+        'Referrer-Policy': 'no-referrer',
+      }
+    });
+
+  } catch (err) {
+    // Surface any error visibly instead of silently crashing
+    return new Response(`App error: ${err.message}\n\nStack: ${err.stack}`, {
+      status: 500,
+      headers: { 'Content-Type': 'text/plain' }
+    });
+  }
+}
+
+// ─── Debug Endpoint (temporary) ──────────────────────────────────────────────
+// Visit /debug-app while logged in to see exactly what's failing.
+// Remove this endpoint once encryption is confirmed working.
+async function handleAppDebug(request, env) {
+  const result = { steps: {} };
+
+  const token = getSessionCookie(request);
+  result.steps.cookie = token ? 'present (' + token.slice(0, 20) + '...)' : 'MISSING';
+  if (!token) return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
+
+  try {
+    const user = await verifySupabaseToken(token, env);
+    result.steps.supabase_user = user ? user.email : 'NULL - token invalid or expired';
+    if (!user) return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
+
+    const subscription = await getSubscriptionStatus(user.id, env);
+    result.steps.subscription = subscription || 'NULL - no record found';
+
+    const appFile = await env.APP_BUCKET.get('SLD_VoltDrop_Manager.html');
+    result.steps.r2_file = appFile ? `found (${appFile.size} bytes)` : 'MISSING from R2';
+    if (!appFile) return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
+
+    const rawHtml = await appFile.text();
+    result.steps.html_length = rawHtml.length;
+
+    const key = await deriveKey(token);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(rawHtml.slice(0, 100)));
+    result.steps.encryption = 'SUCCESS - encrypted first 100 chars fine';
+    result.steps.uint8ToBase64_test = uint8ToBase64(new Uint8Array(encrypted)).slice(0, 30) + '...';
+
+  } catch (err) {
+    result.steps.error = err.message;
+    result.steps.stack = err.stack;
+  }
+
+  return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
 }
 
 // ─── Bootstrap HTML Builder ───────────────────────────────────────────────────
