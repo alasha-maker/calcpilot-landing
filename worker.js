@@ -128,7 +128,19 @@ async function handleAppAccess(request, env) {
     return new Response('App unavailable. Please contact support@calcpilot.cc', { status: 404 });
   }
 
-  const html = await appFile.text();
+  const rawHtml = await appFile.text();
+
+  // ── Layer 4: Inject server-check heartbeat into the app HTML ────────────────
+  // This script lives INSIDE the app HTML before it is encrypted.
+  // Even if a user saves or extracts the decrypted HTML, this script fires on
+  // every page load and calls /auth/key. No valid session → immediate lock screen.
+  // Two consecutive network failures are tolerated (brief drops) before locking.
+  const heartbeat = `<script>(function(){var _f=0;function _v(){fetch('https://calcpilot.cc/auth/key',{method:'GET',credentials:'include'}).then(function(r){_f=0;if(!r.ok)_k()}).catch(function(){if(++_f>1)_k()})}function _k(){document.open();document.write('<!DOCTYPE html><html><body style="background:#0f172a;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:16px;text-align:center"><h2 style="color:#f87171;font-size:1.4rem">\\uD83D\\uDD12 Session Required<\\/h2><p style="color:#94a3b8;max-width:340px;line-height:1.6">This application requires an active CalcPilot subscription.<\\/p><a href="https://calcpilot.cc\\/login" style="padding:12px 28px;background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:600">Log In<\\/a><\\/body><\\/html>');document.close()}document.addEventListener('DOMContentLoaded',function(){_v();setInterval(_v,60000)})})()</script>`;
+
+  // Inject right after <head> if present, otherwise prepend to the document
+  const html = rawHtml.includes('<head>')
+    ? rawHtml.replace('<head>', '<head>' + heartbeat)
+    : heartbeat + rawHtml;
 
   // Derive encryption key from session token
   const key = await deriveKey(token);
