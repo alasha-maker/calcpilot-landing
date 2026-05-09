@@ -42,7 +42,8 @@ export default function Dashboard() {
   };
 
   const handleLaunchApp = () => {
-    window.location.href = "/app";
+    // Timestamp busts any cached plain-HTML response from before encryption was active
+    window.location.href = `/app?s=${Date.now()}`;
   };
 
   const getStatusBadge = (status) => {

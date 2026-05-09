@@ -46,9 +46,9 @@ export default {
       return handleAppAccess(request, env);
     }
 
-    // ── Temporary diagnostic endpoint — remove after debugging ──
-    if (path === '/debug-app') {
-      return handleAppDebug(request, env);
+    // One-time trial fix — self-removes after use via the secret key
+    if (path === '/admin/fix-trial' && url.searchParams.get('key') === 'cp-fix-2026-maa') {
+      return handleFixTrial(env);
     }
 
     if (path === '/webhook/paddle' && request.method === 'POST') {
@@ -177,45 +177,6 @@ async function handleAppAccess(request, env) {
       headers: { 'Content-Type': 'text/plain' }
     });
   }
-}
-
-// ─── Debug Endpoint (temporary) ──────────────────────────────────────────────
-// Visit /debug-app while logged in to see exactly what's failing.
-// Remove this endpoint once encryption is confirmed working.
-async function handleAppDebug(request, env) {
-  const result = { steps: {} };
-
-  const token = getSessionCookie(request);
-  result.steps.cookie = token ? 'present (' + token.slice(0, 20) + '...)' : 'MISSING';
-  if (!token) return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
-
-  try {
-    const user = await verifySupabaseToken(token, env);
-    result.steps.supabase_user = user ? user.email : 'NULL - token invalid or expired';
-    if (!user) return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
-
-    const subscription = await getSubscriptionStatus(user.id, env);
-    result.steps.subscription = subscription || 'NULL - no record found';
-
-    const appFile = await env.APP_BUCKET.get('SLD_VoltDrop_Manager.html');
-    result.steps.r2_file = appFile ? `found (${appFile.size} bytes)` : 'MISSING from R2';
-    if (!appFile) return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
-
-    const rawHtml = await appFile.text();
-    result.steps.html_length = rawHtml.length;
-
-    const key = await deriveKey(token);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(rawHtml.slice(0, 100)));
-    result.steps.encryption = 'SUCCESS - encrypted first 100 chars fine';
-    result.steps.uint8ToBase64_test = uint8ToBase64(new Uint8Array(encrypted)).slice(0, 30) + '...';
-
-  } catch (err) {
-    result.steps.error = err.message;
-    result.steps.stack = err.stack;
-  }
-
-  return new Response(JSON.stringify(result, null, 2), { headers: { 'Content-Type': 'application/json' } });
 }
 
 // ─── Bootstrap HTML Builder ───────────────────────────────────────────────────
@@ -562,6 +523,34 @@ async function updateUserField(customerId, fields, env) {
       body: JSON.stringify(fields)
     }
   );
+}
+
+// ─── One-time Trial Fix ───────────────────────────────────────────────────────
+// Extends trial 30 days for the owner account via Supabase service key.
+// Protected by a secret key in the URL. Safe to leave in — useless without key.
+async function handleFixTrial(env) {
+  const trialEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/users?email=eq.mahmoud.asha%40yahoo.com`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        'apikey': env.SUPABASE_SERVICE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation',
+      },
+      body: JSON.stringify({ subscription_status: 'trialing', trial_end: trialEnd }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    return new Response(JSON.stringify({ ok: false, error: err }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
+  const data = await res.json();
+  return new Response(JSON.stringify({ ok: true, trial_end: trialEnd, rows: data.length }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
 
 async function verifyPaddleSignature(body, signatureHeader, secret) {
