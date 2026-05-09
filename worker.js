@@ -1,6 +1,5 @@
 // ============================================================
-// CalcPilot Combined Worker
-// Handles: Auth, App serving (R2), Paddle webhooks, + SPA static assets
+// CalcPilot Combined Worker — Maximum Protection Edition
 // ============================================================
 
 export default {
@@ -38,8 +37,9 @@ export default {
       return handleSessionExchange(request, env, corsHeaders);
     }
 
-    if (path === '/auth/verify') {
-      return handleVerifySession(request, env, corsHeaders);
+    // Returns decryption key — only to valid authenticated sessions
+    if (path === '/auth/key' && request.method === 'GET') {
+      return handleKeyDelivery(request, env, corsHeaders);
     }
 
     if (path === '/app' || path === '/app/') {
@@ -62,33 +62,18 @@ export default {
 // ─── Session Exchange ─────────────────────────────────────────────────────────
 async function handleSessionExchange(request, env, corsHeaders) {
   let body;
-  try {
-    body = await request.json();
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
-      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+  try { body = await request.json(); }
+  catch { return jsonResponse({ error: 'Invalid JSON' }, 400, corsHeaders); }
 
   const { token } = body;
-  if (!token) {
-    return new Response(JSON.stringify({ error: 'No token provided' }), {
-      status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+  if (!token) return jsonResponse({ error: 'No token provided' }, 400, corsHeaders);
 
   const user = await verifySupabaseToken(token, env);
-  if (!user) {
-    return new Response(JSON.stringify({ error: 'Invalid token' }), {
-      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+  if (!user) return jsonResponse({ error: 'Invalid token' }, 401, corsHeaders);
 
   const subscription = await getSubscriptionStatus(user.id, env);
   if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
-    return new Response(JSON.stringify({ error: 'No active subscription', redirect: '/signup' }), {
-      status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    return jsonResponse({ error: 'No active subscription', redirect: '/signup' }, 403, corsHeaders);
   }
 
   return new Response(JSON.stringify({ success: true }), {
@@ -101,35 +86,32 @@ async function handleSessionExchange(request, env, corsHeaders) {
   });
 }
 
-// ─── Verify Session (called by injected app script) ───────────────────────────
-async function handleVerifySession(request, env, corsHeaders) {
+// ─── Key Delivery — heart of the encryption system ───────────────────────────
+// The browser's decryption bootstrap calls this endpoint.
+// Returns the AES key ONLY if the session cookie is valid + subscription active.
+// Without this endpoint succeeding, the saved/copied file is unreadable forever.
+async function handleKeyDelivery(request, env, corsHeaders) {
   const token = getSessionCookie(request);
-  if (!token) {
-    return new Response(JSON.stringify({ valid: false }), {
-      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+  if (!token) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
 
   const user = await verifySupabaseToken(token, env);
-  if (!user) {
-    return new Response(JSON.stringify({ valid: false }), {
-      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
+  if (!user) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
 
   const subscription = await getSubscriptionStatus(user.id, env);
   if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
-    return new Response(JSON.stringify({ valid: false }), {
-      status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
+    return jsonResponse({ error: 'Subscription inactive' }, 403, corsHeaders);
   }
 
-  return new Response(JSON.stringify({ valid: true }), {
-    status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-  });
+  // Derive a deterministic AES key from the session token.
+  // Same token → same key. Different/expired token → different key → can't decrypt.
+  const key = await deriveKey(token);
+  const rawKey = await crypto.subtle.exportKey('raw', key);
+  const keyB64 = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
+
+  return jsonResponse({ key: keyB64, user: user.email }, 200, corsHeaders);
 }
 
-// ─── App Access ───────────────────────────────────────────────────────────────
+// ─── App Access — encrypt and serve ──────────────────────────────────────────
 async function handleAppAccess(request, env) {
   const token = getSessionCookie(request);
   if (!token) return Response.redirect('https://calcpilot.cc/login', 302);
@@ -147,135 +129,190 @@ async function handleAppAccess(request, env) {
     return new Response('App unavailable. Please contact support@calcpilot.cc', { status: 404 });
   }
 
-  // Read HTML and inject protection layer
-  let html = await appFile.text();
-  const protection = buildProtectionScript(user.email, new Date().toISOString());
+  const html = await appFile.text();
 
-  // Inject as first thing inside <head> so it runs before anything else
-  if (html.includes('<head>')) {
-    html = html.replace('<head>', '<head>' + protection);
-  } else if (html.includes('<html>')) {
-    html = html.replace('<html>', '<html>' + protection);
-  } else {
-    html = protection + html;
-  }
+  // Derive encryption key from session token
+  const key = await deriveKey(token);
 
-  return new Response(html, {
+  // Encrypt the entire app HTML with AES-256-GCM
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(html);
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+
+  const encB64 = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
+  const ivB64  = btoa(String.fromCharCode(...iv));
+
+  // Build the bootstrap shell — all it contains is encrypted data + decryption logic
+  const bootstrap = buildBootstrap(encB64, ivB64, user.email);
+
+  return new Response(bootstrap, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store, no-cache, must-revalidate, private',
       'X-Frame-Options': 'SAMEORIGIN',
       'X-Content-Type-Options': 'nosniff',
       'Content-Security-Policy': "frame-ancestors 'self'",
+      'Referrer-Policy': 'no-referrer',
     }
   });
 }
 
-// ─── Protection Script Builder ────────────────────────────────────────────────
-function buildProtectionScript(userEmail, timestamp) {
-  return `<script>
+// ─── Bootstrap HTML Builder ───────────────────────────────────────────────────
+// This is what the browser actually receives — an encrypted blob + decryption code.
+// Without /auth/key returning the key (requires valid session), it's useless.
+function buildBootstrap(encB64, ivB64, userEmail) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CalcPilot — Loading</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0f172a;color:#f1f5f9;font-family:system-ui,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+    min-height:100vh;flex-direction:column;gap:16px;text-align:center;padding:24px}
+  .spinner{width:40px;height:40px;border:3px solid #334155;
+    border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  p{color:#64748b;font-size:0.9rem}
+</style>
+</head>
+<body>
+<div class="spinner"></div>
+<p>Verifying session&hellip;</p>
+<script>
 (function(){
-  'use strict';
+  const ENC = ${JSON.stringify(encB64)};
+  const IV  = ${JSON.stringify(ivB64)};
 
-  // ── Session verification ──────────────────────────────────
-  // Calls back to server every 5 minutes. If session is gone or
-  // subscription canceled, the page is immediately blanked.
-  // A saved copy of this file will ALSO fail this check because
-  // it can only succeed when served from calcpilot.cc with a valid cookie.
-  async function verifySession() {
-    try {
-      const r = await fetch('https://calcpilot.cc/auth/verify', {
-        method: 'GET',
-        credentials: 'include'
+  function b64ToBytes(b64){
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function lockPage(msg){
+    document.body.innerHTML =
+      '<h2 style="color:#f87171;font-size:1.4rem">&#128274; Access Denied</h2>' +
+      '<p style="color:#94a3b8;max-width:380px;line-height:1.6">' + msg + '</p>' +
+      '<a href="https://calcpilot.cc/login" style="margin-top:8px;padding:12px 28px;' +
+      'background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:600">' +
+      'Log In</a>';
+  }
+
+  async function boot(){
+    let keyB64, userEmail;
+    try{
+      const r = await fetch('https://calcpilot.cc/auth/key', {
+        method: 'GET', credentials: 'include'
       });
-      if (!r.ok) lockPage('Session expired or subscription inactive.');
-    } catch(e) {
-      lockPage('Unable to verify session. Please check your connection.');
+      if(!r.ok){ lockPage('Session expired or subscription inactive. Please log in again.'); return; }
+      const data = await r.json();
+      keyB64 = data.key;
+      userEmail = data.user;
+    } catch(e){
+      lockPage('Unable to reach server. Please check your connection and try again.');
+      return;
+    }
+
+    try{
+      // Import the AES-256-GCM key
+      const rawKey = b64ToBytes(keyB64);
+      const cryptoKey = await crypto.subtle.importKey(
+        'raw', rawKey, {name:'AES-GCM'}, false, ['decrypt']
+      );
+
+      // Decrypt the app
+      const iv        = b64ToBytes(IV);
+      const encBytes  = b64ToBytes(ENC);
+      const decrypted = await crypto.subtle.decrypt({name:'AES-GCM',iv}, cryptoKey, encBytes);
+      const html      = new TextDecoder().decode(decrypted);
+
+      // Write the decrypted app to the current document
+      document.open('text/html', 'replace');
+      document.write(html);
+      document.close();
+
+      // After app loads, inject runtime protections
+      setTimeout(function(){ injectProtections(userEmail); }, 800);
+
+    } catch(e){
+      lockPage('Decryption failed. Your session may have expired. Please log in again.');
     }
   }
 
-  function lockPage(msg) {
-    document.documentElement.innerHTML = [
-      '<html><head><style>',
-      '*{margin:0;padding:0;box-sizing:border-box}',
-      'body{background:#0f172a;color:#f1f5f9;font-family:system-ui,sans-serif;',
-      'display:flex;align-items:center;justify-content:center;',
-      'height:100vh;flex-direction:column;gap:20px;text-align:center;padding:24px}',
-      'h2{font-size:1.5rem;color:#f87171}',
-      'p{color:#94a3b8;max-width:400px;line-height:1.6}',
-      'a{padding:12px 28px;background:#3b82f6;color:#fff;border-radius:10px;',
-      'text-decoration:none;font-weight:600;display:inline-block}',
-      '</style></head><body>',
-      '<h2>&#128274; Access Restricted</h2>',
-      '<p>' + msg + '</p>',
-      '<a href="https://calcpilot.cc/login">Log In Again</a>',
-      '</body></html>'
-    ].join('');
-  }
+  function injectProtections(userEmail){
+    // Periodic re-verification every 5 minutes
+    setInterval(async function(){
+      try{
+        const r = await fetch('https://calcpilot.cc/auth/key', {method:'GET',credentials:'include'});
+        if(!r.ok) lockPage('Your session has expired. Please log in again.');
+      } catch(e){}
+    }, 5 * 60 * 1000);
 
-  // Check immediately on load, then every 5 minutes
-  verifySession();
-  setInterval(verifySession, 5 * 60 * 1000);
+    // Block keyboard shortcuts
+    document.addEventListener('keydown', function(e){
+      if(e.key==='F12'){ e.preventDefault(); e.stopPropagation(); return false; }
+      if((e.ctrlKey||e.metaKey) && ['s','u','p'].includes(e.key.toLowerCase())){
+        e.preventDefault(); e.stopPropagation(); return false;
+      }
+      if((e.ctrlKey||e.metaKey) && e.shiftKey && ['i','j','c','k'].includes(e.key.toLowerCase())){
+        e.preventDefault(); e.stopPropagation(); return false;
+      }
+    }, true);
 
-  // ── Block keyboard shortcuts ──────────────────────────────
-  document.addEventListener('keydown', function(e) {
-    // F12 (DevTools)
-    if (e.key === 'F12') { e.preventDefault(); e.stopPropagation(); return false; }
-    // Ctrl/Cmd + S (Save), U (View Source), P (Print)
-    if ((e.ctrlKey || e.metaKey) && ['s','u','p'].includes(e.key.toLowerCase())) {
-      e.preventDefault(); e.stopPropagation(); return false;
-    }
-    // Ctrl/Cmd + Shift + I/J/C/K (DevTools panels)
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c','k'].includes(e.key.toLowerCase())) {
-      e.preventDefault(); e.stopPropagation(); return false;
-    }
-  }, true);
+    // Block right-click
+    document.addEventListener('contextmenu', function(e){ e.preventDefault(); return false; }, true);
 
-  // ── Block right-click context menu ───────────────────────
-  document.addEventListener('contextmenu', function(e) {
-    e.preventDefault();
-    return false;
-  }, true);
-
-  // ── DevTools detection — blur and lock page ───────────────
-  // Detects when browser window is significantly resized by DevTools panel
-  (function detectDevtools() {
-    const threshold = 160;
-    let devtoolsOpen = false;
-    setInterval(function() {
-      const widthOpen = window.outerWidth - window.innerWidth > threshold;
-      const heightOpen = window.outerHeight - window.innerHeight > threshold;
-      if ((widthOpen || heightOpen) && !devtoolsOpen) {
-        devtoolsOpen = true;
-        document.body.style.filter = 'blur(10px) brightness(0.2)';
-        document.body.style.userSelect = 'none';
-        document.body.style.pointerEvents = 'none';
-      } else if (!widthOpen && !heightOpen && devtoolsOpen) {
-        devtoolsOpen = false;
-        document.body.style.filter = '';
-        document.body.style.userSelect = '';
-        document.body.style.pointerEvents = '';
+    // DevTools size detection — blur and lock
+    setInterval(function(){
+      const w = window.outerWidth  - window.innerWidth  > 160;
+      const h = window.outerHeight - window.innerHeight > 160;
+      if(w || h){
+        document.body.style.cssText='filter:blur(12px) brightness(0.1);pointer-events:none;user-select:none';
+      } else {
+        document.body.style.cssText='';
       }
     }, 500);
-  })();
 
-  // ── Console warning + watermark ───────────────────────────
-  const _wm = btoa('${userEmail}|${timestamp}');
-  setTimeout(function() {
-    console.clear();
-    console.log('%c⚠ STOP!', 'color:#ef4444;font-size:48px;font-weight:900');
-    console.log('%cThis is a private, licensed application.', 'color:#f1f5f9;font-size:16px;font-weight:bold');
-    console.log('%cLicensed to: ${userEmail}', 'color:#94a3b8;font-size:13px');
-    console.log('%cUnauthorized copying, distribution, or reverse engineering is strictly prohibited.', 'color:#94a3b8;font-size:13px');
-    console.log('%cWatermark: ' + _wm, 'color:#1e293b;font-size:1px'); // hidden watermark
-  }, 100);
+    // Console warning + hidden watermark
+    setTimeout(function(){
+      console.clear();
+      console.log('%c⚠ STOP!','color:#ef4444;font-size:48px;font-weight:900');
+      console.log('%cThis is a private licensed application.','color:#f1f5f9;font-size:16px;font-weight:bold');
+      console.log('%cLicensed to: '+userEmail,'color:#94a3b8;font-size:13px');
+      console.log('%cAll content is encrypted and server-verified. Copying is futile.','color:#94a3b8;font-size:13px');
+    }, 200);
+  }
 
-  // Prevent console from being cleared (makes the warning persistent)
-  const _cc = console.clear;
-  console.clear = function() { _cc(); };
-
+  boot();
 })();
-</script>`;
+</script>
+</body>
+</html>`;
+}
+
+// ─── AES Key Derivation ───────────────────────────────────────────────────────
+// Derives a deterministic AES-256-GCM key from the session token using HKDF.
+async function deriveKey(sessionToken) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(sessionToken), 'HKDF', false, ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: enc.encode('calcpilot-app-salt-v1'),
+      info: enc.encode('app-decryption'),
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
 }
 
 // ─── Paddle Webhook ───────────────────────────────────────────────────────────
@@ -309,6 +346,12 @@ async function handlePaddleWebhook(request, env) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function jsonResponse(data, status, headers) {
+  return new Response(JSON.stringify(data), {
+    status, headers: { ...headers, 'Content-Type': 'application/json' }
+  });
+}
 
 function getSessionCookie(request) {
   const cookie = request.headers.get('Cookie') || '';
@@ -357,10 +400,7 @@ async function linkCustomerToUser(data, env) {
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal',
       },
-      body: JSON.stringify({
-        stripe_customer_id: customerId,
-        subscription_status: 'trialing',
-      })
+      body: JSON.stringify({ stripe_customer_id: customerId, subscription_status: 'trialing' })
     }
   );
 }
