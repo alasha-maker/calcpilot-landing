@@ -2,17 +2,6 @@
 // CalcPilot Combined Worker
 // Handles: Auth, App serving (R2), Paddle webhooks, + SPA static assets
 // ============================================================
-//
-// Required Environment Variables (set in Workers dashboard → Settings → Variables):
-//   SUPABASE_URL          → https://tmzxuffhdmvfkahxgcfp.supabase.co
-//   SUPABASE_ANON_KEY     → your Supabase anon/public key
-//   SUPABASE_SERVICE_KEY  → your Supabase service_role key
-//   PADDLE_WEBHOOK_SECRET → your Paddle webhook signing secret
-//
-// Required R2 Binding (Workers dashboard → Settings → Bindings):
-//   Variable name: APP_BUCKET  → Bucket: calcpilot-app
-//
-// ============================================================
 
 export default {
   async fetch(request, env, ctx) {
@@ -30,7 +19,7 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // ── Health check (remove after debugging) ───────────────
+    // ── Health check ────────────────────────────────────────
     if (path === '/health') {
       return new Response(JSON.stringify({
         ok: true,
@@ -41,14 +30,16 @@ export default {
           PADDLE_WEBHOOK_SECRET: !!env.PADDLE_WEBHOOK_SECRET,
           APP_BUCKET: !!env.APP_BUCKET,
         }
-      }, null, 2), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      }, null, 2), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── API Routes ──────────────────────────────────────────
     if (path === '/auth/session' && request.method === 'POST') {
       return handleSessionExchange(request, env, corsHeaders);
+    }
+
+    if (path === '/auth/verify') {
+      return handleVerifySession(request, env, corsHeaders);
     }
 
     if (path === '/app' || path === '/app/') {
@@ -60,7 +51,6 @@ export default {
     }
 
     // ── Static Assets (SPA) ─────────────────────────────────
-    // Try serving the static file; fall back to index.html for SPA routing
     const assetResponse = await env.ASSETS.fetch(request);
     if (assetResponse.status === 404) {
       return env.ASSETS.fetch(new Request(new URL('/index.html', url).toString()));
@@ -111,18 +101,41 @@ async function handleSessionExchange(request, env, corsHeaders) {
   });
 }
 
-// ─── App Access ───────────────────────────────────────────────────────────────
-async function handleAppAccess(request, env) {
+// ─── Verify Session (called by injected app script) ───────────────────────────
+async function handleVerifySession(request, env, corsHeaders) {
   const token = getSessionCookie(request);
-
   if (!token) {
-    return Response.redirect('https://calcpilot.cc/login', 302);
+    return new Response(JSON.stringify({ valid: false }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 
   const user = await verifySupabaseToken(token, env);
   if (!user) {
-    return Response.redirect('https://calcpilot.cc/login', 302);
+    return new Response(JSON.stringify({ valid: false }), {
+      status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
+
+  const subscription = await getSubscriptionStatus(user.id, env);
+  if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
+    return new Response(JSON.stringify({ valid: false }), {
+      status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  return new Response(JSON.stringify({ valid: true }), {
+    status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+  });
+}
+
+// ─── App Access ───────────────────────────────────────────────────────────────
+async function handleAppAccess(request, env) {
+  const token = getSessionCookie(request);
+  if (!token) return Response.redirect('https://calcpilot.cc/login', 302);
+
+  const user = await verifySupabaseToken(token, env);
+  if (!user) return Response.redirect('https://calcpilot.cc/login', 302);
 
   const subscription = await getSubscriptionStatus(user.id, env);
   if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
@@ -134,14 +147,135 @@ async function handleAppAccess(request, env) {
     return new Response('App unavailable. Please contact support@calcpilot.cc', { status: 404 });
   }
 
-  return new Response(appFile.body, {
+  // Read HTML and inject protection layer
+  let html = await appFile.text();
+  const protection = buildProtectionScript(user.email, new Date().toISOString());
+
+  // Inject as first thing inside <head> so it runs before anything else
+  if (html.includes('<head>')) {
+    html = html.replace('<head>', '<head>' + protection);
+  } else if (html.includes('<html>')) {
+    html = html.replace('<html>', '<html>' + protection);
+  } else {
+    html = protection + html;
+  }
+
+  return new Response(html, {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
       'X-Frame-Options': 'SAMEORIGIN',
       'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "frame-ancestors 'self'",
     }
   });
+}
+
+// ─── Protection Script Builder ────────────────────────────────────────────────
+function buildProtectionScript(userEmail, timestamp) {
+  return `<script>
+(function(){
+  'use strict';
+
+  // ── Session verification ──────────────────────────────────
+  // Calls back to server every 5 minutes. If session is gone or
+  // subscription canceled, the page is immediately blanked.
+  // A saved copy of this file will ALSO fail this check because
+  // it can only succeed when served from calcpilot.cc with a valid cookie.
+  async function verifySession() {
+    try {
+      const r = await fetch('https://calcpilot.cc/auth/verify', {
+        method: 'GET',
+        credentials: 'include'
+      });
+      if (!r.ok) lockPage('Session expired or subscription inactive.');
+    } catch(e) {
+      lockPage('Unable to verify session. Please check your connection.');
+    }
+  }
+
+  function lockPage(msg) {
+    document.documentElement.innerHTML = [
+      '<html><head><style>',
+      '*{margin:0;padding:0;box-sizing:border-box}',
+      'body{background:#0f172a;color:#f1f5f9;font-family:system-ui,sans-serif;',
+      'display:flex;align-items:center;justify-content:center;',
+      'height:100vh;flex-direction:column;gap:20px;text-align:center;padding:24px}',
+      'h2{font-size:1.5rem;color:#f87171}',
+      'p{color:#94a3b8;max-width:400px;line-height:1.6}',
+      'a{padding:12px 28px;background:#3b82f6;color:#fff;border-radius:10px;',
+      'text-decoration:none;font-weight:600;display:inline-block}',
+      '</style></head><body>',
+      '<h2>&#128274; Access Restricted</h2>',
+      '<p>' + msg + '</p>',
+      '<a href="https://calcpilot.cc/login">Log In Again</a>',
+      '</body></html>'
+    ].join('');
+  }
+
+  // Check immediately on load, then every 5 minutes
+  verifySession();
+  setInterval(verifySession, 5 * 60 * 1000);
+
+  // ── Block keyboard shortcuts ──────────────────────────────
+  document.addEventListener('keydown', function(e) {
+    // F12 (DevTools)
+    if (e.key === 'F12') { e.preventDefault(); e.stopPropagation(); return false; }
+    // Ctrl/Cmd + S (Save), U (View Source), P (Print)
+    if ((e.ctrlKey || e.metaKey) && ['s','u','p'].includes(e.key.toLowerCase())) {
+      e.preventDefault(); e.stopPropagation(); return false;
+    }
+    // Ctrl/Cmd + Shift + I/J/C/K (DevTools panels)
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i','j','c','k'].includes(e.key.toLowerCase())) {
+      e.preventDefault(); e.stopPropagation(); return false;
+    }
+  }, true);
+
+  // ── Block right-click context menu ───────────────────────
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    return false;
+  }, true);
+
+  // ── DevTools detection — blur and lock page ───────────────
+  // Detects when browser window is significantly resized by DevTools panel
+  (function detectDevtools() {
+    const threshold = 160;
+    let devtoolsOpen = false;
+    setInterval(function() {
+      const widthOpen = window.outerWidth - window.innerWidth > threshold;
+      const heightOpen = window.outerHeight - window.innerHeight > threshold;
+      if ((widthOpen || heightOpen) && !devtoolsOpen) {
+        devtoolsOpen = true;
+        document.body.style.filter = 'blur(10px) brightness(0.2)';
+        document.body.style.userSelect = 'none';
+        document.body.style.pointerEvents = 'none';
+      } else if (!widthOpen && !heightOpen && devtoolsOpen) {
+        devtoolsOpen = false;
+        document.body.style.filter = '';
+        document.body.style.userSelect = '';
+        document.body.style.pointerEvents = '';
+      }
+    }, 500);
+  })();
+
+  // ── Console warning + watermark ───────────────────────────
+  const _wm = btoa('${userEmail}|${timestamp}');
+  setTimeout(function() {
+    console.clear();
+    console.log('%c⚠ STOP!', 'color:#ef4444;font-size:48px;font-weight:900');
+    console.log('%cThis is a private, licensed application.', 'color:#f1f5f9;font-size:16px;font-weight:bold');
+    console.log('%cLicensed to: ${userEmail}', 'color:#94a3b8;font-size:13px');
+    console.log('%cUnauthorized copying, distribution, or reverse engineering is strictly prohibited.', 'color:#94a3b8;font-size:13px');
+    console.log('%cWatermark: ' + _wm, 'color:#1e293b;font-size:1px'); // hidden watermark
+  }, 100);
+
+  // Prevent console from being cleared (makes the warning persistent)
+  const _cc = console.clear;
+  console.clear = function() { _cc(); };
+
+})();
+</script>`;
 }
 
 // ─── Paddle Webhook ───────────────────────────────────────────────────────────
