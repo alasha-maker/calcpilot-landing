@@ -404,15 +404,28 @@ export default function EngineeringAppLandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-white/10 bg-slate-950 px-6 py-8 text-slate-400 lg:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 md:flex-row">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950">
-              <Zap className="h-5 w-5" />
+      <footer className="border-t border-white/10 bg-slate-950 px-6 py-10 text-slate-400 lg:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950">
+                <Zap className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="font-semibold text-white">CalcPilot</div>
+                <div className="text-xs text-slate-500">SLD · Voltage Drop Manager</div>
+              </div>
             </div>
-            <span className="font-semibold text-white">SLD·VD</span>
+            <div className="flex flex-wrap justify-center gap-6 text-sm">
+              <a href="/terms" className="hover:text-white transition-colors">Terms of Service</a>
+              <a href="/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
+              <a href="/refund" className="hover:text-white transition-colors">Refund Policy</a>
+              <a href="mailto:info@calcpilot.com" className="hover:text-white transition-colors">info@calcpilot.com</a>
+            </div>
           </div>
-          <div className="text-sm">© 2026 SLD · Voltage Drop Manager. All rights reserved.</div>
+          <div className="mt-6 border-t border-white/10 pt-6 text-center text-xs text-slate-600">
+            © 2026 CalcPilot. All rights reserved. Built for electrical engineers worldwide.
+          </div>
         </div>
       </footer>
     </div>
