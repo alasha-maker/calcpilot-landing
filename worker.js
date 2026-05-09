@@ -30,6 +30,22 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
+    // ── Health check (remove after debugging) ───────────────
+    if (path === '/health') {
+      return new Response(JSON.stringify({
+        ok: true,
+        env: {
+          SUPABASE_URL: !!env.SUPABASE_URL,
+          SUPABASE_ANON_KEY: !!env.SUPABASE_ANON_KEY,
+          SUPABASE_SERVICE_KEY: !!env.SUPABASE_SERVICE_KEY,
+          PADDLE_WEBHOOK_SECRET: !!env.PADDLE_WEBHOOK_SECRET,
+          APP_BUCKET: !!env.APP_BUCKET,
+        }
+      }, null, 2), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     // ── API Routes ──────────────────────────────────────────
     if (path === '/auth/session' && request.method === 'POST') {
       return handleSessionExchange(request, env, corsHeaders);
