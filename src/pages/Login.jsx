@@ -26,21 +26,26 @@ export default function Login() {
     }
 
     // Exchange token with Worker to get secure session cookie
-    const res = await fetch("https://calcpilot.cc/auth/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ token: data.session.access_token }),
-    });
+    try {
+      const res = await fetch("https://calcpilot.cc/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token: data.session.access_token }),
+      });
 
-    const result = await res.json();
+      const result = await res.json();
 
-    if (res.ok) {
-      window.location.href = "/dashboard";
-    } else if (result.redirect) {
-      window.location.href = result.redirect;
-    } else {
-      setError(result.error || "Login failed. Please try again.");
+      if (res.ok) {
+        window.location.href = "/dashboard";
+      } else if (result.redirect) {
+        window.location.href = result.redirect;
+      } else {
+        setError(result.error || "Login failed. Please try again.");
+        setLoading(false);
+      }
+    } catch (err) {
+      setError("Connection error. Please try again.");
       setLoading(false);
     }
   };
