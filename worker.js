@@ -1,5 +1,5 @@
 // ============================================================
-// CalcPilot Combined Worker — Maximum Protection Edition
+// CalcPilot Combined Worker — Maximum Protection Edition v2
 // ============================================================
 
 export default {
@@ -86,10 +86,9 @@ async function handleSessionExchange(request, env, corsHeaders) {
   });
 }
 
-// ─── Key Delivery — heart of the encryption system ───────────────────────────
-// The browser's decryption bootstrap calls this endpoint.
-// Returns the AES key ONLY if the session cookie is valid + subscription active.
-// Without this endpoint succeeding, the saved/copied file is unreadable forever.
+// ─── Key Delivery ─────────────────────────────────────────────────────────────
+// Returns AES key ONLY if session cookie is valid + subscription is active.
+// Without this succeeding, the saved/copied file is unreadable forever.
 async function handleKeyDelivery(request, env, corsHeaders) {
   const token = getSessionCookie(request);
   if (!token) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
@@ -102,11 +101,11 @@ async function handleKeyDelivery(request, env, corsHeaders) {
     return jsonResponse({ error: 'Subscription inactive' }, 403, corsHeaders);
   }
 
-  // Derive a deterministic AES key from the session token.
-  // Same token → same key. Different/expired token → different key → can't decrypt.
   const key = await deriveKey(token);
   const rawKey = await crypto.subtle.exportKey('raw', key);
-  const keyB64 = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
+  // Use chunked base64 — raw key is only 32 bytes so this isn't strictly needed,
+  // but keeping consistent with the safe helper.
+  const keyB64 = uint8ToBase64(new Uint8Array(rawKey));
 
   return jsonResponse({ key: keyB64, user: user.email }, 200, corsHeaders);
 }
@@ -139,10 +138,14 @@ async function handleAppAccess(request, env) {
   const encoded = new TextEncoder().encode(html);
   const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
 
-  const encB64 = btoa(String.fromCharCode(...new Uint8Array(encrypted)));
-  const ivB64  = btoa(String.fromCharCode(...iv));
+  // BUG FIX: use chunked base64 encoder.
+  // The old btoa(String.fromCharCode(...new Uint8Array(encrypted))) spreads ~400K
+  // bytes as function arguments, blowing the JS call stack (limit ~65K args).
+  // For a 298KB HTML file this was crashing the Worker silently every single time —
+  // meaning encryption was never working at all.
+  const encB64 = uint8ToBase64(new Uint8Array(encrypted));
+  const ivB64  = uint8ToBase64(iv);
 
-  // Build the bootstrap shell — all it contains is encrypted data + decryption logic
   const bootstrap = buildBootstrap(encB64, ivB64, user.email);
 
   return new Response(bootstrap, {
@@ -158,8 +161,14 @@ async function handleAppAccess(request, env) {
 }
 
 // ─── Bootstrap HTML Builder ───────────────────────────────────────────────────
-// This is what the browser actually receives — an encrypted blob + decryption code.
-// Without /auth/key returning the key (requires valid session), it's useless.
+// What the browser receives: encrypted blob + decryption logic only.
+//
+// BUG FIX: Previously used document.write(html) to render the decrypted app.
+// That puts the plain HTML in the DOM — File→Save As captures the full source.
+//
+// Fix: decrypt into a Blob, load it into a sandboxed iframe via a temporary
+// blob URL, then immediately revoke the URL. Now File→Save captures only this
+// bootstrap shell containing the encrypted ciphertext — permanently useless.
 function buildBootstrap(encB64, ivB64, userEmail) {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -169,18 +178,22 @@ function buildBootstrap(encB64, ivB64, userEmail) {
 <title>CalcPilot — Loading</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  body{background:#0f172a;color:#f1f5f9;font-family:system-ui,sans-serif;
-    display:flex;align-items:center;justify-content:center;
-    min-height:100vh;flex-direction:column;gap:16px;text-align:center;padding:24px}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0f172a}
+  #loader{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    height:100vh;gap:16px;color:#f1f5f9;font-family:system-ui,sans-serif;text-align:center;padding:24px}
   .spinner{width:40px;height:40px;border:3px solid #334155;
     border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   p{color:#64748b;font-size:0.9rem}
+  #app-frame{display:none;width:100%;height:100%;border:none;position:fixed;top:0;left:0}
 </style>
 </head>
 <body>
-<div class="spinner"></div>
-<p>Verifying session&hellip;</p>
+<div id="loader">
+  <div class="spinner"></div>
+  <p>Verifying session&hellip;</p>
+</div>
+<iframe id="app-frame" sandbox="allow-scripts allow-forms allow-modals allow-same-origin allow-downloads allow-popups"></iframe>
 <script>
 (function(){
   const ENC = ${JSON.stringify(encB64)};
@@ -193,12 +206,20 @@ function buildBootstrap(encB64, ivB64, userEmail) {
     return bytes;
   }
 
+  function showLoader(msg){
+    const l = document.getElementById('loader');
+    if(l) l.querySelector('p').textContent = msg;
+  }
+
   function lockPage(msg){
-    document.body.innerHTML =
+    document.getElementById('app-frame').style.display = 'none';
+    const loader = document.getElementById('loader');
+    loader.style.display = 'flex';
+    loader.innerHTML =
       '<h2 style="color:#f87171;font-size:1.4rem">&#128274; Access Denied</h2>' +
-      '<p style="color:#94a3b8;max-width:380px;line-height:1.6">' + msg + '</p>' +
+      '<p style="color:#94a3b8;max-width:380px;line-height:1.6;font-family:system-ui,sans-serif">' + msg + '</p>' +
       '<a href="https://calcpilot.cc/login" style="margin-top:8px;padding:12px 28px;' +
-      'background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:600">' +
+      'background:#3b82f6;color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-family:system-ui,sans-serif">' +
       'Log In</a>';
   }
 
@@ -208,7 +229,10 @@ function buildBootstrap(encB64, ivB64, userEmail) {
       const r = await fetch('https://calcpilot.cc/auth/key', {
         method: 'GET', credentials: 'include'
       });
-      if(!r.ok){ lockPage('Session expired or subscription inactive. Please log in again.'); return; }
+      if(!r.ok){
+        lockPage('Session expired or subscription inactive. Please log in again.');
+        return;
+      }
       const data = await r.json();
       keyB64 = data.key;
       userEmail = data.user;
@@ -218,6 +242,8 @@ function buildBootstrap(encB64, ivB64, userEmail) {
     }
 
     try{
+      showLoader('Decrypting application…');
+
       // Import the AES-256-GCM key
       const rawKey = b64ToBytes(keyB64);
       const cryptoKey = await crypto.subtle.importKey(
@@ -225,34 +251,63 @@ function buildBootstrap(encB64, ivB64, userEmail) {
       );
 
       // Decrypt the app
-      const iv        = b64ToBytes(IV);
-      const encBytes  = b64ToBytes(ENC);
+      const iv       = b64ToBytes(IV);
+      const encBytes = b64ToBytes(ENC);
       const decrypted = await crypto.subtle.decrypt({name:'AES-GCM',iv}, cryptoKey, encBytes);
       const html      = new TextDecoder().decode(decrypted);
 
-      // Write the decrypted app to the current document
-      document.open('text/html', 'replace');
-      document.write(html);
-      document.close();
+      // Load decrypted HTML into a sandboxed iframe via a temporary blob URL.
+      // The blob URL is revoked immediately after the iframe loads — it exists
+      // only in memory. File->Save captures this page: just the encrypted blob.
+      const blob    = new Blob([html], {type:'text/html'});
+      const blobUrl = URL.createObjectURL(blob);
 
-      // After app loads, inject runtime protections
-      setTimeout(function(){ injectProtections(userEmail); }, 800);
+      const frame = document.getElementById('app-frame');
+      frame.src = blobUrl;
+      frame.style.display = 'block';
+      document.getElementById('loader').style.display = 'none';
+
+      frame.onload = function(){
+        // Revoke blob URL — iframe content stays in memory, URL is now dead
+        URL.revokeObjectURL(blobUrl);
+
+        // Inject protections into the iframe document
+        try{
+          const iDoc = frame.contentDocument || frame.contentWindow.document;
+
+          iDoc.addEventListener('keydown', function(e){
+            if(e.key==='F12'){ e.preventDefault(); e.stopPropagation(); return false; }
+            if((e.ctrlKey||e.metaKey) && ['s','u','p'].includes(e.key.toLowerCase())){
+              e.preventDefault(); e.stopPropagation(); return false;
+            }
+            if((e.ctrlKey||e.metaKey) && e.shiftKey && ['i','j','c','k'].includes(e.key.toLowerCase())){
+              e.preventDefault(); e.stopPropagation(); return false;
+            }
+          }, true);
+
+          iDoc.addEventListener('contextmenu', function(e){ e.preventDefault(); return false; }, true);
+
+          setTimeout(function(){
+            try{
+              frame.contentWindow.console.clear();
+              frame.contentWindow.console.log('%c⚠ STOP!','color:#ef4444;font-size:48px;font-weight:900');
+              frame.contentWindow.console.log('%cThis is a private licensed application.','color:#f1f5f9;font-size:16px;font-weight:bold');
+              frame.contentWindow.console.log('%cLicensed to: '+userEmail,'color:#94a3b8;font-size:13px');
+              frame.contentWindow.console.log('%cAll content is encrypted and server-verified. Copying is futile.','color:#94a3b8;font-size:13px');
+            }catch(e){}
+          }, 300);
+        } catch(e){}
+
+        startHeartbeat(userEmail);
+      };
 
     } catch(e){
       lockPage('Decryption failed. Your session may have expired. Please log in again.');
     }
   }
 
-  function injectProtections(userEmail){
-    // Periodic re-verification every 5 minutes
-    setInterval(async function(){
-      try{
-        const r = await fetch('https://calcpilot.cc/auth/key', {method:'GET',credentials:'include'});
-        if(!r.ok) lockPage('Your session has expired. Please log in again.');
-      } catch(e){}
-    }, 5 * 60 * 1000);
-
-    // Block keyboard shortcuts
+  function startHeartbeat(userEmail){
+    // Block keyboard shortcuts on the outer bootstrap page
     document.addEventListener('keydown', function(e){
       if(e.key==='F12'){ e.preventDefault(); e.stopPropagation(); return false; }
       if((e.ctrlKey||e.metaKey) && ['s','u','p'].includes(e.key.toLowerCase())){
@@ -263,28 +318,26 @@ function buildBootstrap(encB64, ivB64, userEmail) {
       }
     }, true);
 
-    // Block right-click
     document.addEventListener('contextmenu', function(e){ e.preventDefault(); return false; }, true);
 
-    // DevTools size detection — blur and lock
+    // DevTools size detection — blur iframe if DevTools open
     setInterval(function(){
       const w = window.outerWidth  - window.innerWidth  > 160;
       const h = window.outerHeight - window.innerHeight > 160;
-      if(w || h){
-        document.body.style.cssText='filter:blur(12px) brightness(0.1);pointer-events:none;user-select:none';
-      } else {
-        document.body.style.cssText='';
+      const frame = document.getElementById('app-frame');
+      if(frame){
+        frame.style.filter        = (w||h) ? 'blur(12px) brightness(0.1)' : '';
+        frame.style.pointerEvents = (w||h) ? 'none' : '';
       }
     }, 500);
 
-    // Console warning + hidden watermark
-    setTimeout(function(){
-      console.clear();
-      console.log('%c⚠ STOP!','color:#ef4444;font-size:48px;font-weight:900');
-      console.log('%cThis is a private licensed application.','color:#f1f5f9;font-size:16px;font-weight:bold');
-      console.log('%cLicensed to: '+userEmail,'color:#94a3b8;font-size:13px');
-      console.log('%cAll content is encrypted and server-verified. Copying is futile.','color:#94a3b8;font-size:13px');
-    }, 200);
+    // Re-verify session every 5 minutes
+    setInterval(async function(){
+      try{
+        const r = await fetch('https://calcpilot.cc/auth/key',{method:'GET',credentials:'include'});
+        if(!r.ok) lockPage('Your session has expired or subscription is inactive. Please log in again.');
+      } catch(e){}
+    }, 5 * 60 * 1000);
   }
 
   boot();
@@ -295,7 +348,6 @@ function buildBootstrap(encB64, ivB64, userEmail) {
 }
 
 // ─── AES Key Derivation ───────────────────────────────────────────────────────
-// Derives a deterministic AES-256-GCM key from the session token using HKDF.
 async function deriveKey(sessionToken) {
   const enc = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
@@ -313,6 +365,18 @@ async function deriveKey(sessionToken) {
     true,
     ['encrypt', 'decrypt']
   );
+}
+
+// ─── Safe Base64 Encoding ─────────────────────────────────────────────────────
+// Processes in 8KB chunks to avoid "Maximum call stack size exceeded" when
+// spreading large Uint8Arrays into String.fromCharCode().
+function uint8ToBase64(bytes) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i += 8192) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + 8192, len)));
+  }
+  return btoa(binary);
 }
 
 // ─── Paddle Webhook ───────────────────────────────────────────────────────────
@@ -370,9 +434,12 @@ async function verifySupabaseToken(token, env) {
   return res.json();
 }
 
+// BUG FIX: Previously only checked subscription_status, never compared
+// trial_end against today's date. A user whose trial expired but whose
+// Paddle webhook never fired would stay in 'trialing' status forever.
 async function getSubscriptionStatus(userId, env) {
   const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=subscription_status,trial_end`,
+    `${env.SUPABASE_URL}/rest/v1/users?id=eq.${userId}&select=subscription_status,trial_end,subscription_end`,
     {
       headers: {
         'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
@@ -382,7 +449,17 @@ async function getSubscriptionStatus(userId, env) {
   );
   if (!res.ok) return null;
   const data = await res.json();
-  return data[0] || null;
+  const user = data[0];
+  if (!user) return null;
+
+  // If still marked trialing, verify the trial period hasn't actually ended
+  if (user.subscription_status === 'trialing' && user.trial_end) {
+    if (new Date(user.trial_end) < new Date()) {
+      return { ...user, subscription_status: 'expired' };
+    }
+  }
+
+  return user;
 }
 
 async function linkCustomerToUser(data, env) {
