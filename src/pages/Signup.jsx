@@ -3,14 +3,34 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
   "https://tmzxuffhdmvfkahxgcfp.supabase.co",
-  "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp" // sb_pub... key
+  "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp"
 );
 
-// Paddle Price IDs
+// Paddle Billing Price IDs
 const PRICES = {
   monthly: "pri_01kr62rgnmggyxdtad8hcwqjr9",
   annual: "pri_01kr62vzsjmh3a6ft9465zkeeh",
 };
+
+// Paddle client-side token (safe for frontend use)
+const PADDLE_TOKEN = "live_71ff440e1dfa05180a41f2c0b7b";
+
+function loadPaddle() {
+  return new Promise((resolve, reject) => {
+    if (window.Paddle) {
+      resolve(window.Paddle);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+    script.onload = () => {
+      window.Paddle.Initialize({ token: PADDLE_TOKEN });
+      resolve(window.Paddle);
+    };
+    script.onerror = () => reject(new Error("Failed to load Paddle.js"));
+    document.head.appendChild(script);
+  });
+}
 
 export default function Signup() {
   const [email, setEmail] = useState("");
@@ -44,11 +64,21 @@ export default function Signup() {
       return;
     }
 
-    // Redirect to Paddle checkout
-    // Paddle Billing checkout URL with customer email pre-filled
-    const priceId = PRICES[plan];
-    const checkoutUrl = `https://buy.paddle.com/product/${priceId}?email=${encodeURIComponent(email)}&success_url=${encodeURIComponent("https://calcpilot.cc/dashboard")}`;
-    window.location.href = checkoutUrl;
+    // Load Paddle.js and open overlay checkout
+    try {
+      const Paddle = await loadPaddle();
+      Paddle.Checkout.open({
+        items: [{ priceId: PRICES[plan], quantity: 1 }],
+        customer: { email },
+        settings: {
+          successUrl: "https://calcpilot.cc/dashboard",
+        },
+      });
+    } catch (err) {
+      setError("Failed to open checkout. Please try again.");
+    }
+
+    setLoading(false);
   };
 
   return (
