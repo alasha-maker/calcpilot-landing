@@ -89,7 +89,7 @@ export default function Dashboard() {
       {/* Header */}
       <header className="border-b border-gray-800 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-blue-400">CalcPilot</h1>
+          <h1 className="text-2xl font-bold text-blue-400">Calc.Pilot</h1>
           <div className="flex items-center gap-4">
             <span className="text-gray-400 text-sm hidden sm:block">{user?.email}</span>
             <button

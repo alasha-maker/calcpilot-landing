@@ -11,7 +11,7 @@ function PolicyLayout({ title, lastUpdated, children }) {
               <Zap className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-lg font-bold tracking-tight">CalcPilot</div>
+              <div className="text-lg font-bold tracking-tight">Calc.Pilot</div>
               <div className="text-xs text-slate-400">SLD · Voltage Drop Manager</div>
             </div>
           </Link>
@@ -32,7 +32,7 @@ function PolicyLayout({ title, lastUpdated, children }) {
 
       <footer className="border-t border-white/10 px-6 py-8 text-slate-500 lg:px-8">
         <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 text-sm md:flex-row">
-          <span>© 2026 CalcPilot. All rights reserved.</span>
+          <span>© 2026 Calc.Pilot. All rights reserved.</span>
           <div className="flex gap-6">
             <Link to="/terms" className="hover:text-white">Terms of Service</Link>
             <Link to="/privacy" className="hover:text-white">Privacy Policy</Link>
@@ -57,12 +57,12 @@ export default function RefundPolicy() {
   return (
     <PolicyLayout title="Refund & Cancellation Policy" lastUpdated="May 2026">
       <p className="text-slate-400 -mt-4">
-        We want you to be satisfied with CalcPilot. Here is how refunds and cancellations work — straightforwardly.
+        We want you to be satisfied with Calc.Pilot. Here is how refunds and cancellations work — straightforwardly.
       </p>
 
       <Section title="1. Free Trial">
         <p>
-          CalcPilot offers a free trial period so you can evaluate the platform before committing to a paid plan. No payment is required during the trial. You will only be charged once you choose to upgrade to a paid subscription.
+          Calc.Pilot offers a free trial period so you can evaluate the platform before committing to a paid plan. No payment is required during the trial. You will only be charged once you choose to upgrade to a paid subscription.
         </p>
       </Section>
 

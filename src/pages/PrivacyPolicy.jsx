@@ -11,7 +11,7 @@ function PolicyLayout({ title, lastUpdated, children }) {
               <Zap className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-lg font-bold tracking-tight">CalcPilot</div>
+              <div className="text-lg font-bold tracking-tight">Calc.Pilot</div>
               <div className="text-xs text-slate-400">SLD · Voltage Drop Manager</div>
             </div>
           </Link>
@@ -32,7 +32,7 @@ function PolicyLayout({ title, lastUpdated, children }) {
 
       <footer className="border-t border-white/10 px-6 py-8 text-slate-500 lg:px-8">
         <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 text-sm md:flex-row">
-          <span>© 2026 CalcPilot. All rights reserved.</span>
+          <span>© 2026 Calc.Pilot. All rights reserved.</span>
           <div className="flex gap-6">
             <Link to="/terms" className="hover:text-white">Terms of Service</Link>
             <Link to="/privacy" className="hover:text-white">Privacy Policy</Link>
@@ -57,12 +57,12 @@ export default function PrivacyPolicy() {
   return (
     <PolicyLayout title="Privacy Policy" lastUpdated="May 2026">
       <p className="text-slate-400 -mt-4">
-        CalcPilot respects your privacy. This policy explains what data we collect, how we use it, and your rights — in plain language.
+        Calc.Pilot respects your privacy. This policy explains what data we collect, how we use it, and your rights — in plain language.
       </p>
 
       <Section title="1. Who We Are">
         <p>
-          CalcPilot is an electrical engineering software platform. When we say "we," "us," or "CalcPilot," we mean the team operating the Service. For privacy inquiries, contact us at{" "}
+          Calc.Pilot is an electrical engineering software platform. When we say "we," "us," or "Calc.Pilot," we mean the team operating the Service. For privacy inquiries, contact us at{" "}
           <a href="mailto:info@calcpilot.com" className="text-cyan-400 hover:underline">info@calcpilot.com</a>.
         </p>
       </Section>
@@ -91,7 +91,7 @@ export default function PrivacyPolicy() {
 
       <Section title="4. GCC & Regional Compliance">
         <p>
-          CalcPilot operates in compliance with applicable data protection laws, including Qatar's Personal Data Privacy Protection Law (Law No. 13 of 2016) and the UAE Federal Decree-Law No. 45 of 2021 on Personal Data Protection. Users in these jurisdictions have the right to:
+          Calc.Pilot operates in compliance with applicable data protection laws, including Qatar's Personal Data Privacy Protection Law (Law No. 13 of 2016) and the UAE Federal Decree-Law No. 45 of 2021 on Personal Data Protection. Users in these jurisdictions have the right to:
         </p>
         <ul className="mt-3 list-disc list-inside space-y-2 text-slate-400">
           <li>Access personal data we hold about them.</li>
@@ -126,7 +126,7 @@ export default function PrivacyPolicy() {
 
       <Section title="8. Cookies">
         <p>
-          CalcPilot uses essential cookies to keep you logged in and remember your preferences. We may also use analytics cookies to understand how the platform is used. You can disable non-essential cookies in your browser settings.
+          Calc.Pilot uses essential cookies to keep you logged in and remember your preferences. We may also use analytics cookies to understand how the platform is used. You can disable non-essential cookies in your browser settings.
         </p>
       </Section>
 

@@ -11,7 +11,7 @@ function PolicyLayout({ title, lastUpdated, children }) {
               <Zap className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-lg font-bold tracking-tight">CalcPilot</div>
+              <div className="text-lg font-bold tracking-tight">Calc.Pilot</div>
               <div className="text-xs text-slate-400">SLD · Voltage Drop Manager</div>
             </div>
           </Link>
@@ -32,7 +32,7 @@ function PolicyLayout({ title, lastUpdated, children }) {
 
       <footer className="border-t border-white/10 px-6 py-8 text-slate-500 lg:px-8">
         <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 text-sm md:flex-row">
-          <span>© 2026 CalcPilot. All rights reserved.</span>
+          <span>© 2026 Calc.Pilot. All rights reserved.</span>
           <div className="flex gap-6">
             <Link to="/terms" className="hover:text-white">Terms of Service</Link>
             <Link to="/privacy" className="hover:text-white">Privacy Policy</Link>
@@ -58,25 +58,25 @@ export default function TermsOfService() {
     <PolicyLayout title="Terms of Service" lastUpdated="May 2026">
       <Section title="1. Acceptance of Terms">
         <p>
-          By accessing or using CalcPilot ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, please do not use the Service. These terms apply to all users, including individuals and organizations in Qatar, the GCC region, and internationally.
+          By accessing or using Calc.Pilot ("the Service"), you agree to be bound by these Terms of Service. If you do not agree, please do not use the Service. These terms apply to all users, including individuals and organizations in Qatar, the GCC region, and internationally.
         </p>
       </Section>
 
       <Section title="2. Description of Service">
         <p>
-          CalcPilot is a cloud-based electrical engineering tool that helps engineers design load schedules, calculate voltage drop, size cables and breakers, generate single-line diagrams (SLD), and produce project reports. The Service is provided on a subscription basis.
+          Calc.Pilot is a cloud-based electrical engineering tool that helps engineers design load schedules, calculate voltage drop, size cables and breakers, generate single-line diagrams (SLD), and produce project reports. The Service is provided on a subscription basis.
         </p>
       </Section>
 
       <Section title="3. Account Registration">
         <p>
-          You must create an account to use CalcPilot. You are responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account. You agree to provide accurate, current, and complete information during registration and to keep it updated.
+          You must create an account to use Calc.Pilot. You are responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account. You agree to provide accurate, current, and complete information during registration and to keep it updated.
         </p>
       </Section>
 
       <Section title="4. Subscription Plans">
         <p>
-          CalcPilot offers monthly and annual subscription plans. By subscribing, you authorize us to charge your payment method on a recurring basis at the then-current subscription rate. Prices are listed in USD and may be subject to local taxes depending on your jurisdiction.
+          Calc.Pilot offers monthly and annual subscription plans. By subscribing, you authorize us to charge your payment method on a recurring basis at the then-current subscription rate. Prices are listed in USD and may be subject to local taxes depending on your jurisdiction.
         </p>
         <ul className="mt-3 list-disc list-inside space-y-2 text-slate-400">
           <li>Monthly plans renew automatically every 30 days.</li>
@@ -98,19 +98,19 @@ export default function TermsOfService() {
 
       <Section title="6. Intellectual Property">
         <p>
-          All content, features, algorithms, and design elements within CalcPilot are the intellectual property of CalcPilot and are protected by international copyright and intellectual property laws. Your subscription grants you a limited, non-exclusive, non-transferable license to use the Service for your own professional purposes.
+          All content, features, algorithms, and design elements within Calc.Pilot are the intellectual property of Calc.Pilot and are protected by international copyright and intellectual property laws. Your subscription grants you a limited, non-exclusive, non-transferable license to use the Service for your own professional purposes.
         </p>
       </Section>
 
       <Section title="7. Disclaimer of Warranties">
         <p>
-          CalcPilot is provided "as is" without warranties of any kind, either express or implied. While we strive for accuracy, calculation results should always be reviewed by a qualified licensed engineer before use in any submission, construction, or regulatory filing. CalcPilot does not replace professional engineering judgment.
+          Calc.Pilot is provided "as is" without warranties of any kind, either express or implied. While we strive for accuracy, calculation results should always be reviewed by a qualified licensed engineer before use in any submission, construction, or regulatory filing. Calc.Pilot does not replace professional engineering judgment.
         </p>
       </Section>
 
       <Section title="8. Limitation of Liability">
         <p>
-          To the maximum extent permitted by applicable law, CalcPilot and its team shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service, including but not limited to errors in calculations, project delays, or regulatory non-compliance.
+          To the maximum extent permitted by applicable law, Calc.Pilot and its team shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service, including but not limited to errors in calculations, project delays, or regulatory non-compliance.
         </p>
       </Section>
 
