@@ -103,8 +103,8 @@ export default function EngineeringAppLandingPage() {
               <Zap className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-lg font-bold tracking-tight">SLD·VD</div>
-              <div className="text-xs text-slate-400">Voltage Drop Manager</div>
+              <div className="text-lg font-bold tracking-tight">CalcPilot</div>
+              <div className="text-xs text-slate-400">SLD · Voltage Drop Manager</div>
             </div>
           </div>
 
@@ -135,7 +135,7 @@ export default function EngineeringAppLandingPage() {
                 Load schedules, voltage drop, and SLD — in one tool.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                SLD·VD lets engineers build full distribution hierarchies, calculate voltage drop per Kahramaa or IEC 60364, auto-size cables and breakers, generate single-line diagrams, and produce professional client reports — all in a single workflow.
+                CalcPilot lets engineers build full distribution hierarchies, calculate voltage drop per Kahramaa or IEC 60364, auto-size cables and breakers, generate single-line diagrams, and produce professional client reports — all in a single workflow.
               </p>
               <div className="mt-9 flex flex-col gap-4 sm:flex-row">
                 <a href="/signup"><Button size="lg" className="rounded-2xl bg-cyan-400 px-7 py-6 text-base font-semibold text-slate-950 hover:bg-cyan-300">
@@ -262,13 +262,13 @@ export default function EngineeringAppLandingPage() {
                     <span className="h-3 w-3 rounded-full bg-yellow-500/70" />
                     <span className="h-3 w-3 rounded-full bg-green-500/70" />
                     <div className="mx-4 flex-1 rounded-md bg-slate-700 px-3 py-1 text-xs text-slate-400">
-                      app.sldvd.com / project / lv-distribution
+                      app.calcpilot.cc / project / lv-distribution
                     </div>
                   </div>
                   <div className="overflow-hidden rounded-b-2xl">
                     <img
                       src="/app-screenshot.png"
-                      alt="SLD·VD load manager showing full distribution hierarchy with voltage drop results"
+                      alt="CalcPilot load manager showing full distribution hierarchy with voltage drop results"
                       className="w-full object-cover"
                       draggable={false}
                     />
