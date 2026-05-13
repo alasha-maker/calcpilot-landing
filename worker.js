@@ -2,6 +2,8 @@
 // CalcPilot Combined Worker — Maximum Protection Edition v2
 // ============================================================
 
+import { runCalculate } from './calc/engine.js';
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -44,6 +46,11 @@ export default {
 
     if (path === '/app' || path === '/app/') {
       return handleAppAccess(request, env);
+    }
+
+    // Server-side calc engine — auth-gated POST
+    if (path === '/api/calc' && request.method === 'POST') {
+      return handleCalcApi(request, env, corsHeaders);
     }
 
     // One-time trial fix — self-removes after use via the secret key
@@ -113,6 +120,91 @@ async function handleKeyDelivery(request, env, corsHeaders) {
   const keyB64 = uint8ToBase64(new Uint8Array(rawKey));
 
   return jsonResponse({ key: keyB64, user: user.email }, 200, corsHeaders);
+}
+
+// ─── Calc API — server-side voltage drop engine ──────────────────────────────
+// Auth-gated POST endpoint. The competitor's stolen HTML is useless without an
+// active CalcPilot session: every formula, Kahramaa table, and recommendation
+// rule lives in the bundled calc/* modules — never shipped to the browser.
+async function handleCalcApi(request, env, corsHeaders) {
+  const startedAt = Date.now();
+
+  // ── Auth: session cookie → Supabase user → active subscription ──
+  const token = getSessionCookie(request);
+  if (!token) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
+
+  const user = await verifySupabaseToken(token, env);
+  if (!user) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
+
+  const subscription = await getSubscriptionStatus(user.id, env);
+  if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
+    return jsonResponse({ error: 'Subscription inactive' }, 403, corsHeaders);
+  }
+
+  // ── Body size guard — refuse anything larger than ~512KB ──
+  const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+  if (contentLength > 512 * 1024) {
+    return jsonResponse({ error: 'Payload too large (max 512KB)' }, 413, corsHeaders);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch { return jsonResponse({ error: 'Invalid JSON' }, 400, corsHeaders); }
+
+  const {
+    loads,
+    params,
+    sources,
+    gridInfo,
+    customCableTable,
+    cablePriceOverrides,
+    earthPriceOverrides,
+  } = body || {};
+
+  // ── Input validation ──
+  if (!Array.isArray(loads)) {
+    return jsonResponse({ error: 'loads must be an array' }, 400, corsHeaders);
+  }
+  if (!params || typeof params !== 'object') {
+    return jsonResponse({ error: 'params must be an object' }, 400, corsHeaders);
+  }
+  if (loads.length > 5000) {
+    return jsonResponse({ error: 'Too many loads (max 5000)' }, 400, corsHeaders);
+  }
+
+  // ── Run the engine ──
+  try {
+    const result = runCalculate({
+      loads,
+      params,
+      sources: Array.isArray(sources) ? sources : [],
+      gridInfo: gridInfo || { sscMVA: 250, hvKV: 11, earthing: 'TN-S' },
+      customCableTable: customCableTable || null,
+      cablePriceOverrides: cablePriceOverrides || {},
+      earthPriceOverrides: earthPriceOverrides || {},
+    });
+
+    return jsonResponse({
+      ok: true,
+      results: result.results,
+      sourceIscMap: result.sourceIscMap,
+      sourceZMap: result.sourceZMap,
+      meta: {
+        durationMs: Date.now() - startedAt,
+        count: result.results?.length ?? 0,
+        user: user.email,
+      },
+    }, 200, {
+      ...corsHeaders,
+      // No caching — calc inputs are user-specific and frequently change
+      'Cache-Control': 'no-store, private',
+    });
+  } catch (err) {
+    return jsonResponse({
+      error: 'Calc engine error',
+      message: err?.message || String(err),
+    }, 500, corsHeaders);
+  }
 }
 
 // ─── App Access — encrypt and serve ──────────────────────────────────────────
