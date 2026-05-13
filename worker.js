@@ -3,6 +3,8 @@
 // ============================================================
 
 import { runCalculate } from './calc/engine.js';
+import { applyOptimizedCableSelection, recommendedMCCBForLoad } from './calc/recommend.js';
+import { buildChildrenMap, computeChainTotal } from './calc/topology.js';
 
 export default {
   async fetch(request, env, ctx) {
@@ -51,6 +53,16 @@ export default {
     // Server-side calc engine — auth-gated POST
     if (path === '/api/calc' && request.method === 'POST') {
       return handleCalcApi(request, env, corsHeaders);
+    }
+
+    // Server-side cable optimizer
+    if (path === '/api/auto-cable' && request.method === 'POST') {
+      return handleAutoCableApi(request, env, corsHeaders);
+    }
+
+    // Server-side MCCB recommender
+    if (path === '/api/auto-mccb' && request.method === 'POST') {
+      return handleAutoMccbApi(request, env, corsHeaders);
     }
 
     // One-time trial fix — self-removes after use via the secret key
@@ -202,6 +214,156 @@ async function handleCalcApi(request, env, corsHeaders) {
   } catch (err) {
     return jsonResponse({
       error: 'Calc engine error',
+      message: err?.message || String(err),
+    }, 500, corsHeaders);
+  }
+}
+
+// ─── Auto Cable API — server-side cable optimizer ────────────────────────────
+// Reuses applyOptimizedCableSelection from calc/recommend.js. The optimizer
+// algorithm and Kahramaa/IEC tables never leave the server. Client sends the
+// project state + selected load IDs + options, receives the modified loads
+// array back. Same auth gate as /api/calc.
+async function handleAutoCableApi(request, env, corsHeaders) {
+  const startedAt = Date.now();
+
+  const token = getSessionCookie(request);
+  if (!token) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
+  const user = await verifySupabaseToken(token, env);
+  if (!user) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
+  const subscription = await getSubscriptionStatus(user.id, env);
+  if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
+    return jsonResponse({ error: 'Subscription inactive' }, 403, corsHeaders);
+  }
+
+  const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+  if (contentLength > 512 * 1024) {
+    return jsonResponse({ error: 'Payload too large (max 512KB)' }, 413, corsHeaders);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch { return jsonResponse({ error: 'Invalid JSON' }, 400, corsHeaders); }
+
+  const {
+    loads, params, customCableTable,
+    cablePriceOverrides = {}, earthPriceOverrides = {},
+    ids, basis = 'mccb', considerVD = true, considerSegVD = false, segVDLimit = 1.5,
+  } = body || {};
+
+  if (!Array.isArray(loads)) return jsonResponse({ error: 'loads must be an array' }, 400, corsHeaders);
+  if (!params || typeof params !== 'object') return jsonResponse({ error: 'params required' }, 400, corsHeaders);
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return jsonResponse({ error: 'ids must be a non-empty array' }, 400, corsHeaders);
+  }
+  if (loads.length > 5000) return jsonResponse({ error: 'Too many loads (max 5000)' }, 400, corsHeaders);
+
+  try {
+    // Defensive deep clone — applyOptimizedCableSelection mutates loads in place
+    const workingLoads = loads.map(l => ({ ...l }));
+    const changedCount = applyOptimizedCableSelection(
+      workingLoads,
+      params,
+      customCableTable || null,
+      ids,
+      basis,
+      !!considerVD,
+      !!considerSegVD,
+      parseFloat(segVDLimit) || 1.5,
+      cablePriceOverrides,
+      earthPriceOverrides
+    );
+    return jsonResponse({
+      ok: true,
+      loads: workingLoads,
+      changedCount,
+      meta: {
+        durationMs: Date.now() - startedAt,
+        basis, considerVD, considerSegVD, segVDLimit,
+        user: user.email,
+      },
+    }, 200, { ...corsHeaders, 'Cache-Control': 'no-store, private' });
+  } catch (err) {
+    return jsonResponse({
+      error: 'Auto-cable engine error',
+      message: err?.message || String(err),
+    }, 500, corsHeaders);
+  }
+}
+
+// ─── Auto MCCB API — server-side MCCB recommender ────────────────────────────
+// Reuses recommendedMCCBForLoad from calc/recommend.js. Builds autoTotalMap
+// from loads server-side (needed for tcl/tdl basis). Returns the modified
+// loads array. Same auth gate as /api/calc.
+async function handleAutoMccbApi(request, env, corsHeaders) {
+  const startedAt = Date.now();
+
+  const token = getSessionCookie(request);
+  if (!token) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
+  const user = await verifySupabaseToken(token, env);
+  if (!user) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
+  const subscription = await getSubscriptionStatus(user.id, env);
+  if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
+    return jsonResponse({ error: 'Subscription inactive' }, 403, corsHeaders);
+  }
+
+  const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+  if (contentLength > 512 * 1024) {
+    return jsonResponse({ error: 'Payload too large (max 512KB)' }, 413, corsHeaders);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch { return jsonResponse({ error: 'Invalid JSON' }, 400, corsHeaders); }
+
+  const {
+    loads, params, customCableTable,
+    ids, basis = 'tcl',
+  } = body || {};
+
+  if (!Array.isArray(loads)) return jsonResponse({ error: 'loads must be an array' }, 400, corsHeaders);
+  if (!params || typeof params !== 'object') return jsonResponse({ error: 'params required' }, 400, corsHeaders);
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return jsonResponse({ error: 'ids must be a non-empty array' }, 400, corsHeaders);
+  }
+  if (loads.length > 5000) return jsonResponse({ error: 'Too many loads (max 5000)' }, 400, corsHeaders);
+
+  try {
+    const workingLoads = loads.map(l => ({ ...l }));
+
+    // Build autoTotalMap (needed by recommendedMCCBForLoad when basis is tcl/tdl)
+    const nameMap = {};
+    workingLoads.forEach(l => { nameMap[l.name] = l; });
+    const childrenMap = buildChildrenMap(workingLoads, nameMap);
+    const autoTotalMap = {};
+    workingLoads.forEach(l => {
+      autoTotalMap[l.id] = computeChainTotal(l.name, nameMap, new Set(), childrenMap, workingLoads);
+    });
+
+    let changedCount = 0;
+    ids.forEach(id => {
+      const l = workingLoads.find(x => x.id === id);
+      if (!l) return;
+      const next = recommendedMCCBForLoad(l, undefined, basis, params, autoTotalMap, customCableTable || null);
+      if (next !== l.mccb) {
+        l.mccb = next;
+        changedCount++;
+      }
+    });
+
+    return jsonResponse({
+      ok: true,
+      loads: workingLoads,
+      changedCount,
+      meta: {
+        durationMs: Date.now() - startedAt,
+        basis,
+        user: user.email,
+      },
+    }, 200, { ...corsHeaders, 'Cache-Control': 'no-store, private' });
+  } catch (err) {
+    return jsonResponse({
+      error: 'Auto-MCCB engine error',
       message: err?.message || String(err),
     }, 500, corsHeaders);
   }
