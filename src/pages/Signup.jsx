@@ -41,8 +41,46 @@ export default function Signup() {
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     if (password.length < 8)          { setError("Password must be at least 8 characters."); return; }
     setLoading(true);
-    const { error: signUpError } = await supabase.auth.signUp({ email, password });
+
+    // Step 1 — Create Supabase auth user
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
     if (signUpError) { setError(signUpError.message); setLoading(false); return; }
+
+    const token = signUpData?.session?.access_token;
+
+    if (token) {
+      // Step 2 — Create the public.users row (trialing) so the webhook can find it
+      try {
+        await fetch("https://calcpilot.cc/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ token }),
+        });
+      } catch (err) {
+        console.warn("Register call failed (non-fatal):", err);
+      }
+
+      // Step 3 — Set the calcpilot_session cookie so /app works after checkout
+      try {
+        await fetch("https://calcpilot.cc/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ token }),
+        });
+      } catch (err) {
+        console.warn("Session setup failed (non-fatal):", err);
+      }
+    } else {
+      // Email confirmation is enabled in Supabase — user must verify before paying.
+      // Direct them to check their inbox instead of opening checkout.
+      setError("Account created! Check your inbox to confirm your email, then log in to start your free trial.");
+      setLoading(false);
+      return;
+    }
+
+    // Step 4 — Open Paddle checkout
     try {
       const Paddle = await loadPaddle();
       Paddle.Checkout.open({

@@ -235,7 +235,7 @@ export function runCalculate({ loads, params, sources, gridInfo, customCableTabl
       cat, groupSize, Cg, effRatedA,
       vd: segVD, vdPct: segVDpct, cumVD: cumVDpct, cumVDv,
       segVDOK, cumVDOK, vAtPanel, lossKW, Isc_kA,
-      ratedA, Kt, ktLocked, Cg, ampOK, mccbOK, tripOK, sourceOK, lenOK,
+      ratedA, Kt, ktLocked, ampOK, mccbOK, tripOK, sourceOK, lenOK,
       designStatus, designIssues, recMM2, recN, status,
       Ist, kVArRequired,
     };

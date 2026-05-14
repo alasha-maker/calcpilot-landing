@@ -70,6 +70,12 @@ export default {
       return handleFixTrial(env);
     }
 
+    // Creates / ensures the public.users row exists right after signUp —
+    // called from the Signup page before Paddle checkout opens.
+    if (path === '/api/register' && request.method === 'POST') {
+      return handleRegister(request, env, corsHeaders);
+    }
+
     if (path === '/webhook/paddle' && request.method === 'POST') {
       return handlePaddleWebhook(request, env);
     }
@@ -666,6 +672,55 @@ function uint8ToBase64(bytes) {
   return btoa(binary);
 }
 
+// ─── Register ─────────────────────────────────────────────────────────────────
+// Called immediately after supabase.auth.signUp() succeeds on the Signup page.
+// Verifies the JWT, then UPSERTs a row in public.users so the row exists before
+// the Paddle webhook fires. Without this, linkCustomerToUser() PATCHes zero rows.
+async function handleRegister(request, env, corsHeaders) {
+  let body;
+  try { body = await request.json(); }
+  catch { return jsonResponse({ error: 'Invalid JSON' }, 400, corsHeaders); }
+
+  const { token } = body;
+  if (!token) return jsonResponse({ error: 'No token provided' }, 400, corsHeaders);
+
+  const user = await verifySupabaseToken(token, env);
+  if (!user) return jsonResponse({ error: 'Invalid token' }, 401, corsHeaders);
+
+  // Trial ends 30 days from now — Paddle webhook will overwrite with its own dates
+  // once the subscription.created event fires.
+  const trialEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  // POST with resolution=ignore-duplicates: inserts the row if it doesn't exist,
+  // leaves it untouched if it already does (safe to call multiple times).
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/users?on_conflict=id`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        'apikey':         env.SUPABASE_SERVICE_KEY,
+        'Content-Type':  'application/json',
+        'Prefer':        'resolution=ignore-duplicates,return=minimal',
+      },
+      body: JSON.stringify({
+        id:                  user.id,
+        email:               user.email,
+        subscription_status: 'trialing',
+        trial_end:           trialEnd,
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error('[/api/register] Supabase error:', err);
+    return jsonResponse({ error: 'Failed to create user record' }, 500, corsHeaders);
+  }
+
+  return jsonResponse({ ok: true }, 200, corsHeaders);
+}
+
 // ─── Paddle Webhook ───────────────────────────────────────────────────────────
 async function handlePaddleWebhook(request, env) {
   const signature = request.headers.get('Paddle-Signature');
@@ -754,19 +809,66 @@ async function linkCustomerToUser(data, env) {
   const customerId = data.customer_id;
   if (!email) return;
 
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}`,
-    {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-        'apikey': env.SUPABASE_SERVICE_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal',
-      },
-      body: JSON.stringify({ stripe_customer_id: customerId, subscription_status: 'trialing' })
+  // Step 1: Try to look up the Supabase auth user UUID by email so we can upsert.
+  // The service key grants access to the admin users endpoint.
+  let userId = null;
+  try {
+    const adminRes = await fetch(
+      `${env.SUPABASE_URL}/auth/v1/admin/users?filter=${encodeURIComponent(email)}&page=1&per_page=1`,
+      {
+        headers: {
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          'apikey':         env.SUPABASE_SERVICE_KEY,
+        }
+      }
+    );
+    if (adminRes.ok) {
+      const adminData = await adminRes.json();
+      userId = adminData.users?.[0]?.id ?? null;
     }
-  );
+  } catch (e) {
+    console.warn('[linkCustomerToUser] admin lookup failed:', e?.message);
+  }
+
+  const trialEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  if (userId) {
+    // UPSERT — creates the row if /api/register was never called, updates if it was.
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/users?on_conflict=id`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          'apikey':         env.SUPABASE_SERVICE_KEY,
+          'Content-Type':  'application/json',
+          'Prefer':        'resolution=merge-duplicates,return=minimal',
+        },
+        body: JSON.stringify({
+          id:                  userId,
+          email:               email,
+          stripe_customer_id:  customerId,
+          subscription_status: 'trialing',
+          trial_end:           trialEnd,
+        }),
+      }
+    );
+  } else {
+    // Fallback: row should already exist from /api/register — just update the customer ID.
+    await fetch(
+      `${env.SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+          'apikey':         env.SUPABASE_SERVICE_KEY,
+          'Content-Type':  'application/json',
+          'Prefer':        'return=minimal',
+        },
+        body: JSON.stringify({ stripe_customer_id: customerId, subscription_status: 'trialing', trial_end: trialEnd }),
+      }
+    );
+  }
 }
 
 async function updateSubscription(data, env) {
