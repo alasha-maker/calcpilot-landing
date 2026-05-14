@@ -212,9 +212,19 @@ async function handleCalcApi(request, env, corsHeaders) {
       'Cache-Control': 'no-store, private',
     });
   } catch (err) {
+    // Server-side logging so the stack shows up in Cloudflare Worker logs
+    console.error('[/api/calc] engine threw:', err?.stack || err?.message || err);
+    console.error('[/api/calc] payload summary:', JSON.stringify({
+      user: user?.email,
+      loadCount: Array.isArray(loads) ? loads.length : 'n/a',
+      sourceCount: Array.isArray(sources) ? sources.length : 'n/a',
+      mode: params?.mode,
+      cableTable: params?.cableTable,
+    }));
     return jsonResponse({
       error: 'Calc engine error',
       message: err?.message || String(err),
+      stack: err?.stack ? String(err.stack).split('\n').slice(0, 5).join('\n') : undefined,
     }, 500, corsHeaders);
   }
 }
@@ -284,9 +294,11 @@ async function handleAutoCableApi(request, env, corsHeaders) {
       },
     }, 200, { ...corsHeaders, 'Cache-Control': 'no-store, private' });
   } catch (err) {
+    console.error('[/api/auto-cable] engine threw:', err?.stack || err?.message || err);
     return jsonResponse({
       error: 'Auto-cable engine error',
       message: err?.message || String(err),
+      stack: err?.stack ? String(err.stack).split('\n').slice(0, 5).join('\n') : undefined,
     }, 500, corsHeaders);
   }
 }
@@ -362,9 +374,11 @@ async function handleAutoMccbApi(request, env, corsHeaders) {
       },
     }, 200, { ...corsHeaders, 'Cache-Control': 'no-store, private' });
   } catch (err) {
+    console.error('[/api/auto-mccb] engine threw:', err?.stack || err?.message || err);
     return jsonResponse({
       error: 'Auto-MCCB engine error',
       message: err?.message || String(err),
+      stack: err?.stack ? String(err.stack).split('\n').slice(0, 5).join('\n') : undefined,
     }, 500, corsHeaders);
   }
 }
