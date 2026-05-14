@@ -1,31 +1,58 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
+import "../../landing-new.css";
 
 const supabase = createClient(
   "https://tmzxuffhdmvfkahxgcfp.supabase.co",
-  "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp" // sb_pub... key
+  "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp"
 );
 
+const PRICES = {
+  monthly: "pri_01kr62rgnmggyxdtad8hcwqjr9",
+  annual:  "pri_01kr62vzsjmh3a6ft9465zkeeh",
+};
+const PADDLE_TOKEN = "live_71ff440e1dfa05180a41f2c0b7b";
+
+function loadPaddle() {
+  return new Promise((resolve, reject) => {
+    if (window.Paddle) { resolve(window.Paddle); return; }
+    const script = document.createElement("script");
+    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+    script.onload = () => { window.Paddle.Initialize({ token: PADDLE_TOKEN }); resolve(window.Paddle); };
+    script.onerror = () => reject(new Error("Failed to load Paddle.js"));
+    document.head.appendChild(script);
+  });
+}
+
 export default function Dashboard() {
-  const [user, setUser] = useState(null);
+  const [user, setUser]               = useState(null);
   const [subscription, setSubscription] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]         = useState(true);
+  const [plan, setPlan]               = useState("monthly");
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError]     = useState("");
 
   useEffect(() => {
     const loadUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-
-      if (!session) {
-        window.location.href = "/login";
-        return;
-      }
+      if (!session) { window.location.href = "/login"; return; }
 
       setUser(session.user);
 
-      // Fetch subscription info
+      // Ensure users row exists (safe no-op if already there)
+      try {
+        await fetch("https://calcpilot.cc/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ token: session.access_token }),
+        });
+      } catch (_) {}
+
       const { data } = await supabase
         .from("users")
-        .select("subscription_status, trial_end, subscription_end")
+        .select("subscription_status, trial_end, subscription_end, stripe_customer_id")
         .eq("id", session.user.id)
         .single();
 
@@ -42,28 +69,29 @@ export default function Dashboard() {
   };
 
   const handleLaunchApp = () => {
-    // Timestamp busts any cached plain-HTML response from before encryption was active
     window.location.href = `/app?s=${Date.now()}`;
   };
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      trialing: "bg-blue-900/50 text-blue-300 border-blue-700",
-      active: "bg-green-900/50 text-green-300 border-green-700",
-      canceled: "bg-red-900/50 text-red-300 border-red-700",
-      past_due: "bg-yellow-900/50 text-yellow-300 border-yellow-700",
-    };
-    const labels = {
-      trialing: "Free Trial",
-      active: "Active",
-      canceled: "Canceled",
-      past_due: "Payment Due",
-    };
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-medium border ${styles[status] || "bg-gray-800 text-gray-400 border-gray-700"}`}>
-        {labels[status] || status}
-      </span>
-    );
+  const handleSubscribe = async () => {
+    setCheckoutError("");
+    setCheckoutLoading(true);
+    try {
+      const Paddle = await loadPaddle();
+      Paddle.Checkout.open({
+        items: [{ priceId: PRICES[plan], quantity: 1 }],
+        customer: { email: user.email },
+        settings: { successUrl: "https://calcpilot.cc/dashboard" },
+      });
+    } catch (err) {
+      setCheckoutError("Failed to open checkout. Please try again.");
+    }
+    setCheckoutLoading(false);
+  };
+
+  const daysLeft = (dateStr) => {
+    if (!dateStr) return null;
+    const diff = new Date(dateStr) - new Date();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   };
 
   const formatDate = (dateStr) => {
@@ -75,100 +103,186 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-400 text-lg">Loading your dashboard...</div>
+      <div style={{ background: '#06080b', minHeight: '100vh', fontFamily: '"Inter Tight", system-ui, sans-serif' }}
+           className="flex items-center justify-center">
+        <div className="mono text-zinc-500" style={{ fontSize: '11px', letterSpacing: '0.15em' }}>LOADING DASHBOARD...</div>
       </div>
     );
   }
 
-  const isActive = subscription?.subscription_status === "trialing" ||
-    subscription?.subscription_status === "active";
+  const status = subscription?.subscription_status;
+  const isActive = status === "trialing" || status === "active";
+  const hasBilling = !!subscription?.stripe_customer_id;
+  const trialDays = daysLeft(subscription?.trial_end);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-blue-400">Calc.Pilot</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-400 text-sm hidden sm:block">{user?.email}</span>
-            <button
-              onClick={handleLogout}
-              className="text-sm text-gray-400 hover:text-white transition-colors"
-            >
-              Sign out
+    <div style={{ background: '#06080b', minHeight: '100vh', fontFamily: '"Inter Tight", system-ui, sans-serif', color: '#e6e7e9' }}
+         className="flex flex-col">
+
+      {/* ── NAV ── */}
+      <header className="border-b rule" style={{ background: 'rgba(6,8,11,0.95)' }}>
+        <div className="wrap flex items-center justify-between py-4">
+          <Link to="/" className="flex items-center gap-3" style={{ textDecoration: 'none' }}>
+            <div className="mono font-bold tracking-tight flex items-center gap-1.5" style={{ fontSize: '16px' }}>
+              <span className="text-cyan-300">SLD</span><span className="text-zinc-700">·</span><span className="text-pink-400">VD</span>
+            </div>
+            <div className="hidden md:block h-4 w-px bg-zinc-800"></div>
+            <div className="hidden md:block">
+              <div className="text-sm font-semibold tracking-tight">CalcPilot</div>
+              <div className="mono text-zinc-500" style={{ fontSize: '9px', letterSpacing: '0.15em' }}>EE DESIGN PLATFORM</div>
+            </div>
+          </Link>
+          <div className="flex items-center gap-6">
+            <span className="mono text-zinc-500 hidden sm:block" style={{ fontSize: '11px' }}>{user?.email}</span>
+            <button onClick={handleLogout}
+              className="mono text-zinc-400 hover:text-white transition-colors"
+              style={{ fontSize: '11px', letterSpacing: '0.1em', background: 'none', border: 'none', cursor: 'pointer' }}>
+              SIGN OUT
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-10 space-y-6">
+      <main className="wrap py-12 space-y-6" style={{ maxWidth: '720px' }}>
+
         {/* Welcome */}
-        <div>
-          <h2 className="text-2xl font-semibold text-white">Welcome back 👋</h2>
-          <p className="text-gray-400 mt-1">{user?.email}</p>
+        <div className="mb-8">
+          <div className="eyebrow mb-3"><span className="num">[01]</span>Dashboard</div>
+          <h1 className="display text-white" style={{ fontSize: '40px' }}>Welcome back.</h1>
         </div>
 
-        {/* Launch App Card */}
-        <div className="bg-gradient-to-br from-blue-900/40 to-blue-800/20 border border-blue-700/50 rounded-2xl p-8 text-center">
-          <div className="text-5xl mb-4">⚡</div>
-          <h3 className="text-xl font-bold text-white mb-2">
-            SLD & Voltage Drop Manager
-          </h3>
-          <p className="text-gray-300 text-sm mb-6">
-            Professional electrical engineering calculations at your fingertips.
-          </p>
+        {/* ── Launch App Card ── */}
+        <div className="surface-deep p-8 text-center" style={{ border: isActive ? '1px solid #1a3a2a' : '1px solid #1a1f27' }}>
+          <div className="mono text-zinc-500 mb-2" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>SLD & VOLTAGE DROP MANAGER</div>
+          <h2 className="text-white font-bold mb-1" style={{ fontSize: '22px' }}>Professional Electrical Calculations</h2>
+          <p className="text-zinc-400 mb-6" style={{ fontSize: '13px' }}>Kahramaa T10/T11 · IEC 60364 · Fault current · Cable optimisation</p>
+
           {isActive ? (
-            <button
-              onClick={handleLaunchApp}
-              className="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors text-lg shadow-lg shadow-blue-900/40"
-            >
-              Launch App →
+            <button onClick={handleLaunchApp} className="btn-primary" style={{ minWidth: '200px' }}>
+              LAUNCH APP →
             </button>
           ) : (
-            <div className="space-y-3">
-              <p className="text-red-300 text-sm">Your subscription is inactive.</p>
-              <a
-                href="/signup"
-                className="inline-block px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-colors"
-              >
-                Reactivate Subscription
-              </a>
+            <div>
+              <p className="mono text-red-400 mb-4" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
+                ⚠ SUBSCRIPTION INACTIVE — SET UP BILLING BELOW TO RESTORE ACCESS
+              </p>
             </div>
           )}
         </div>
 
-        {/* Subscription Info */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Subscription</h3>
+        {/* ── Subscription Status ── */}
+        <div className="surface p-6">
+          <div className="mono text-zinc-500 mb-4" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>SUBSCRIPTION STATUS</div>
           <div className="space-y-3">
-            <div className="flex items-center justify-between py-2 border-b border-gray-800">
-              <span className="text-gray-400">Status</span>
-              {subscription ? getStatusBadge(subscription.subscription_status) : (
-                <span className="text-gray-500 text-sm">No subscription found</span>
-              )}
+            <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #1a1f27' }}>
+              <span className="text-zinc-400" style={{ fontSize: '14px' }}>Status</span>
+              <span className={`mono font-bold`} style={{
+                fontSize: '11px', letterSpacing: '0.1em',
+                color: status === 'active' ? '#4ade80' : status === 'trialing' ? '#7ed3f7' : '#f87171'
+              }}>
+                {status === 'trialing' ? 'FREE TRIAL' : status === 'active' ? 'ACTIVE' : status === 'canceled' ? 'CANCELED' : status === 'past_due' ? 'PAYMENT DUE' : 'INACTIVE'}
+              </span>
             </div>
-            <div className="flex items-center justify-between py-2 border-b border-gray-800">
-              <span className="text-gray-400">Trial ends</span>
-              <span className="text-gray-200 text-sm">{formatDate(subscription?.trial_end)}</span>
-            </div>
+
+            {status === 'trialing' && subscription?.trial_end && (
+              <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #1a1f27' }}>
+                <span className="text-zinc-400" style={{ fontSize: '14px' }}>Trial ends</span>
+                <span className="mono text-zinc-300" style={{ fontSize: '12px' }}>
+                  {formatDate(subscription.trial_end)}
+                  {trialDays !== null && (
+                    <span className={`ml-2 ${trialDays <= 7 ? 'text-amber-400' : 'text-zinc-500'}`}>
+                      ({trialDays}d left)
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+
+            {subscription?.subscription_end && (
+              <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #1a1f27' }}>
+                <span className="text-zinc-400" style={{ fontSize: '14px' }}>Next billing</span>
+                <span className="mono text-zinc-300" style={{ fontSize: '12px' }}>{formatDate(subscription.subscription_end)}</span>
+              </div>
+            )}
+
             <div className="flex items-center justify-between py-2">
-              <span className="text-gray-400">Next billing date</span>
-              <span className="text-gray-200 text-sm">{formatDate(subscription?.subscription_end)}</span>
+              <span className="text-zinc-400" style={{ fontSize: '14px' }}>Payment method</span>
+              <span className="mono" style={{ fontSize: '11px', letterSpacing: '0.08em', color: hasBilling ? '#4ade80' : '#f87171' }}>
+                {hasBilling ? 'CONFIGURED ✓' : 'NOT SET UP'}
+              </span>
             </div>
           </div>
         </div>
 
+        {/* ── Billing Setup — show when no payment method OR subscription inactive ── */}
+        {(!hasBilling || !isActive) && (
+          <div className="surface p-6" style={{ border: '1px solid rgba(126,211,247,0.15)' }}>
+            <div className="mono text-cyan-400 mb-1" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>
+              {!isActive ? 'REACTIVATE SUBSCRIPTION' : 'SET UP BILLING'}
+            </div>
+            <p className="text-zinc-400 mb-5" style={{ fontSize: '13px', lineHeight: '1.6' }}>
+              {!isActive
+                ? 'Your access has lapsed. Subscribe below to restore it immediately.'
+                : 'Your free trial is running. Add payment now — you won\'t be charged until the trial ends.'}
+            </p>
+
+            {/* Plan picker */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <button type="button" onClick={() => setPlan("monthly")}
+                className="p-4 text-left transition-all"
+                style={{
+                  background: plan === 'monthly' ? 'linear-gradient(180deg,rgba(126,211,247,0.06),transparent),#0a0d12' : '#0a0d12',
+                  border: plan === 'monthly' ? '1px solid #7ed3f7' : '1px solid #1a1f27',
+                }}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="mono text-zinc-400" style={{ fontSize: '9px', letterSpacing: '0.15em' }}>STANDARD</span>
+                  <span className="pill pill-info" style={{ fontSize: '9px' }}>MONTHLY</span>
+                </div>
+                <div className="display text-white" style={{ fontSize: '28px' }}>$12<span className="text-zinc-500" style={{ fontSize: '13px' }}>/mo</span></div>
+              </button>
+
+              <button type="button" onClick={() => setPlan("annual")}
+                className="p-4 text-left transition-all relative"
+                style={{
+                  background: plan === 'annual' ? 'linear-gradient(180deg,rgba(126,211,247,0.06),transparent),#0a0d12' : '#0a0d12',
+                  border: plan === 'annual' ? '1px solid #7ed3f7' : '1px solid #1a1f27',
+                }}>
+                <div className="absolute -top-2.5 right-3 mono font-bold bg-emerald-400 text-slate-950 px-2 py-0.5" style={{ fontSize: '8px', letterSpacing: '0.12em' }}>SAVE 65%</div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="mono text-zinc-400" style={{ fontSize: '9px', letterSpacing: '0.15em' }}>STANDARD</span>
+                  <span className="pill pill-pass" style={{ fontSize: '9px' }}>ANNUAL</span>
+                </div>
+                <div className="display text-white" style={{ fontSize: '28px' }}>$50<span className="text-zinc-500" style={{ fontSize: '13px' }}>/yr</span></div>
+              </button>
+            </div>
+
+            <div className="mt-2 flex items-center gap-2 mono text-zinc-500 mb-5" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
+              1 MONTH FREE TRIAL INCLUDED · NO CHARGE TODAY · CANCEL ANYTIME
+            </div>
+
+            {checkoutError && (
+              <div className="mono px-4 py-3 mb-4" style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.3)', color: '#ff8a8a', fontSize: '12px' }}>
+                ⚠ {checkoutError}
+              </div>
+            )}
+
+            <button onClick={handleSubscribe} disabled={checkoutLoading} className="btn-primary w-full"
+              style={{ opacity: checkoutLoading ? 0.6 : 1, cursor: checkoutLoading ? 'not-allowed' : 'pointer' }}>
+              {checkoutLoading ? "OPENING CHECKOUT..." : "SUBSCRIBE NOW →"}
+            </button>
+          </div>
+        )}
+
         {/* Support */}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-2">Need help?</h3>
-          <p className="text-gray-400 text-sm">
-            Contact us at{" "}
-            <a href="mailto:support@calcpilot.cc" className="text-blue-400 hover:text-blue-300">
-              support@calcpilot.cc
-            </a>
+        <div className="surface p-6">
+          <div className="mono text-zinc-500 mb-2" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>SUPPORT</div>
+          <p className="text-zinc-400" style={{ fontSize: '13px' }}>
+            Questions? Email us at{" "}
+            <a href="mailto:support@calcpilot.cc" className="text-cyan-300 hover:text-cyan-200">support@calcpilot.cc</a>
           </p>
         </div>
+
       </main>
     </div>
   );
