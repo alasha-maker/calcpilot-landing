@@ -1,433 +1,678 @@
-import React from "react";
-import { motion } from "framer-motion";
-import { Cable, Zap, FileText, Settings, BarChart3, CheckCircle2, ArrowRight, Lock, FileCode2, ListTree } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import './landing-new.css';
 
-const features = [
-  {
-    icon: ListTree,
-    title: "Load Manager",
-    description: "Build your full distribution hierarchy — MDB, SMDB, DB, and Final Loads — with inline editing, bulk operations, undo/redo, and search-filter by status.",
-  },
-  {
-    icon: Zap,
-    title: "Voltage Drop Engine",
-    description: "Calculate segment and cumulative VD% per circuit using Kahramaa (mV/A/m tables) or IEC 60364 resistivity method. Clear PASS / WARN / FAIL status per run.",
-  },
-  {
-    icon: Cable,
-    title: "Auto Cable & MCCB Sizing",
-    description: "Automatically right-size cables and protection devices across all circuits in one click, respecting cumulative VD limits, ampacity, and derating factors.",
-  },
-  {
-    icon: BarChart3,
-    title: "SLD Generator",
-    description: "Generate color-coded single-line diagrams directly from your load hierarchy and export to AutoCAD DXF — fully layered with busbars, feeders, equipment, and tags on separate CAD layers.",
-  },
-  {
-    icon: FileCode2,
-    title: "DXF Import",
-    description: "Import cable lengths directly from CAD drawings. Intelligent label matching maps DXF cable runs to your load schedule — preview before applying.",
-  },
-  {
-    icon: FileText,
-    title: "Reports & Cost Estimation",
-    description: "Generate professional client submission reports and a full bill-of-materials with cable cost breakdown by size, run length, and installation method.",
-  },
+/* ── Auto-cable demo data ── */
+const AC_INITIAL = [
+  { load: 'LIGHT-01', cable: '2.5mm²', vd: '3.3%', vdClass: 'text-red-400',    status: 'fail' },
+  { load: 'LIGHT-02', cable: '2.5mm²', vd: '4.5%', vdClass: 'text-red-400',    status: 'fail' },
+  { load: 'AC-1',     cable: '10mm²',  vd: '1.0%', vdClass: 'text-amber-300',  status: 'warn' },
+  { load: 'AC-2',     cable: '10mm²',  vd: '1.5%', vdClass: 'text-amber-300',  status: 'warn' },
+];
+const AC_FIXED = [
+  { load: 'LIGHT-01', cable: '4mm²',  vd: '2.1%', vdClass: 'text-emerald-300', status: 'pass' },
+  { load: 'LIGHT-02', cable: '6mm²',  vd: '2.0%', vdClass: 'text-emerald-300', status: 'pass' },
+  { load: 'AC-1',     cable: '16mm²', vd: '0.7%', vdClass: 'text-emerald-300', status: 'pass' },
+  { load: 'AC-2',     cable: '16mm²', vd: '0.9%', vdClass: 'text-emerald-300', status: 'pass' },
 ];
 
-const standards = ["Kahramaa (Qatar)", "IEC 60364", "Custom Cable Data"];
+/* ── Standards mode data ── */
+const MODE_DATA = {
+  kahramaa: { method: 'T10 lookup · mV/A/m',      derate: 'Cg=0.80 · Cd=0.94',          seg: '2.1%', cum: '0.9%', segC: 'text-emerald-300', cumC: 'text-emerald-300', label: 'KAHRAMAA', pillClass: 'pill pill-info' },
+  iec:      { method: 'Resistivity ρ · IEC 60364', derate: 'Cg=0.80 · Cd=0.94 · Ka=0.96', seg: '2.3%', cum: '1.0%', segC: 'text-emerald-300', cumC: 'text-emerald-300', label: 'IEC 60364', pillClass: 'pill pill-magenta' },
+  custom:   { method: 'Manufacturer datasheet',    derate: 'Per row override',             seg: '1.9%', cum: '0.8%', segC: 'text-emerald-300', cumC: 'text-emerald-300', label: 'CUSTOM',    pillClass: 'pill pill-warn' },
+};
 
-const pricing = [
-  {
-    name: "Trial",
-    price: "Free",
-    description: "For engineers evaluating the platform.",
-    features: ["Limited load entries", "Voltage drop calculations", "Kahramaa & IEC modes", "Sample report export"],
-    cta: "Start Free Trial",
-    highlight: false,
-  },
-  {
-    name: "Pro",
-    price: "Monthly",
-    description: "For individual engineers and project managers.",
-    features: ["Unlimited projects & loads", "Auto cable & MCCB sizing", "DXF import & SLD export", "PDF & Excel report export", "Cost estimation module"],
-    cta: "Request Access",
-    highlight: true,
-  },
-  {
-    name: "Team",
-    price: "Company License",
-    description: "For contractors, consultants, and engineering teams.",
-    features: ["Multi-user access", "Admin dashboard", "Shared project library", "Company report branding", "Priority support"],
-    cta: "Book a Demo",
-    highlight: false,
-  },
-];
-
-const faqs = [
-  {
-    q: "Does it support Kahramaa calculations?",
-    a: "Yes. Kahramaa (Qatar) mode uses the official cable tables (T10 for PVC, T11 for XLPE) with fixed ampacity ratings per installation method, matching Qatar authority submission requirements.",
-  },
-  {
-    q: "Can I import cable lengths from a CAD drawing?",
-    a: "Yes. The DXF import module reads cable lengths directly from AutoCAD drawings and matches them to your load schedule using intelligent label recognition. You can preview all matches before confirming.",
-  },
-  {
-    q: "How does Auto Cable Sizing work?",
-    a: "Auto Cable applies to selected rows or all circuits at once. It selects the minimum cable size that satisfies both ampacity and your defined VD% limit (segment or cumulative), respecting grouping derating.",
-  },
-  {
-    q: "Can I export the SLD to AutoCAD?",
-    a: "Yes. The SLD Generator exports a DXF file that opens in any version of AutoCAD. Busbars, feeders, equipment symbols, tags, and notes are each on their own CAD layer so you can control visibility, color, and plotting independently.",
-  },
-];
-
-function SectionLabel({ children }) {
-  return (
-    <div className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 shadow-sm">
-      {children}
-    </div>
-  );
+function StatusPill({ status }) {
+  if (status === 'pass') return <span className="pill pill-pass">PASS</span>;
+  if (status === 'warn') return <span className="pill pill-warn">WARN</span>;
+  return <span className="pill pill-fail">FAIL</span>;
 }
 
-export default function EngineeringAppLandingPage() {
+export default function CalcPilotLandingPage() {
+  const [acFixed, setAcFixed] = useState(false);
+  const [mode, setMode]       = useState('kahramaa');
+  const rows = acFixed ? AC_FIXED : AC_INITIAL;
+  const m    = MODE_DATA[mode];
+
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
-        <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-400/20">
-              <Zap className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-lg font-bold tracking-tight">CalcPilot</div>
-              <div className="text-xs text-slate-400">SLD · Voltage Drop Manager</div>
-            </div>
-          </div>
+    <div style={{ background: '#06080b', color: '#e6e7e9', fontFamily: '"Inter Tight", system-ui, sans-serif', WebkitFontSmoothing: 'antialiased', minHeight: '100vh' }}>
 
-          <div className="hidden items-center gap-8 text-sm font-medium text-slate-300 md:flex">
-            <a href="#features" className="hover:text-white">Features</a>
-            <a href="#showcase" className="hover:text-white">Preview</a>
-            <a href="#standards" className="hover:text-white">Standards</a>
-            <a href="#pricing" className="hover:text-white">Pricing</a>
-            <a href="#faq" className="hover:text-white">FAQ</a>
+      {/* ── TOP STRIP ── */}
+      <div className="border-b rule" style={{ background: '#020409' }}>
+        <div className="wrap py-2 flex items-center justify-between mono text-zinc-500" style={{ fontSize: '10.5px', letterSpacing: '0.12em' }}>
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 live-dot"></span>
+            <span>v2.4.1 SHIPPED · DXF IMPORT NOW MULTI-SHEET</span>
           </div>
+          <div className="flex items-center gap-5">
+            <span className="hidden md:inline">QATAR · UAE · SAUDI · OMAN</span>
+            <a href="#changelog" className="hover:text-zinc-200">CHANGELOG ↗</a>
+          </div>
+        </div>
+      </div>
 
-          <div className="flex items-center gap-3">
-            <a href="/login"><Button variant="ghost" className="hidden text-slate-200 hover:bg-white/10 hover:text-white md:inline-flex">Login</Button></a>
-            <a href="/signup"><Button className="rounded-2xl bg-cyan-400 text-slate-950 hover:bg-cyan-300">Start Trial</Button></a>
+      {/* ── NAV ── */}
+      <header className="sticky top-0 z-50 border-b rule backdrop-blur-xl" style={{ background: 'rgba(6,8,11,0.85)' }}>
+        <nav className="wrap flex items-center justify-between py-4">
+          <Link to="/" className="flex items-center gap-3" style={{ textDecoration: 'none' }}>
+            <div className="mono font-bold tracking-tight flex items-center gap-1.5" style={{ fontSize: '16px' }}>
+              <span className="text-cyan-300">SLD</span><span className="text-zinc-700">·</span><span className="text-pink-400">VD</span>
+            </div>
+            <div className="hidden md:block h-4 w-px bg-zinc-800"></div>
+            <div className="hidden md:block">
+              <div className="text-sm font-semibold tracking-tight">CalcPilot</div>
+              <div className="mono text-zinc-500" style={{ fontSize: '9px', letterSpacing: '0.15em' }}>EE DESIGN PLATFORM</div>
+            </div>
+          </Link>
+          <div className="hidden lg:flex gap-7 mono text-zinc-400" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
+            <a href="#features"  className="nav-link hover:text-white">FEATURES</a>
+            <a href="#engine"    className="nav-link hover:text-white">CALC ENGINE</a>
+            <a href="#preview"   className="nav-link hover:text-white">PREVIEW</a>
+            <a href="#standards" className="nav-link hover:text-white">STANDARDS</a>
+            <a href="#pricing"   className="nav-link hover:text-white">PRICING</a>
+            <a href="#faq"       className="nav-link hover:text-white">FAQ</a>
+          </div>
+          <div className="flex items-center gap-5">
+            <Link to="/login" className="mono text-zinc-400 hover:text-white" style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none' }}>LOG IN</Link>
+            <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
           </div>
         </nav>
       </header>
 
-      <main>
-        <section className="relative overflow-hidden px-6 py-20 lg:px-8 lg:py-28">
-          <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_left,rgba(59,130,246,0.18),transparent_30%)]" />
-          <div className="mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-2">
-            <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-sm text-cyan-200">
-                <Lock className="h-4 w-4" /> Built for electrical distribution design
-              </div>
-              <h1 className="max-w-4xl text-5xl font-bold tracking-tight text-white md:text-6xl lg:text-7xl">
-                Load schedules, voltage drop, and SLD — in one tool.
-              </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-                CalcPilot lets engineers build full distribution hierarchies, calculate voltage drop per Kahramaa or IEC 60364, auto-size cables and breakers, generate single-line diagrams, and produce professional client reports — all in a single workflow.
-              </p>
-              <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-                <a href="/signup"><Button size="lg" className="rounded-2xl bg-cyan-400 px-7 py-6 text-base font-semibold text-slate-950 hover:bg-cyan-300">
-                  Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
-                </Button></a>
-                <a href="mailto:support@calcpilot.cc"><Button size="lg" variant="outline" className="rounded-2xl border-white/20 bg-white/5 px-7 py-6 text-base font-semibold text-white hover:bg-white/10">
-                  Request Demo
-                </Button></a>
-              </div>
-              <div className="mt-8 flex flex-wrap gap-4 text-sm text-slate-400">
-                <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> Kahramaa (Qatar)</span>
-                <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> IEC 60364</span>
-                <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-cyan-300" /> DXF Import & Export</span>
-              </div>
-            </motion.div>
+      {/* ── HERO ── */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 gridbg opacity-70 pointer-events-none"></div>
+        <div className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(126,211,247,0.10), transparent 60%)' }}></div>
+        <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(244,114,182,0.07), transparent 60%)' }}></div>
 
-            <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.7, delay: 0.1 }}>
-              <div className="rounded-[2rem] border border-white/10 bg-white/10 p-3 shadow-2xl shadow-cyan-950/40 backdrop-blur-xl">
-                <div className="rounded-[1.5rem] bg-slate-900 p-5">
-                  <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-4">
-                    <div>
-                      <div className="text-sm text-slate-400">Project</div>
-                      <div className="font-semibold">Building LV Distribution</div>
-                    </div>
-                    <div className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm font-medium text-emerald-300">Passed</div>
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {[
-                      ["Load Current", "412 A"],
-                      ["Selected Cable", "CU/XLPE 4C × 300mm²"],
-                      ["Cumulative VD", "1.8%"],
-                      ["Isc at Panel", "8.2 kA"],
-                    ].map(([label, value]) => (
-                      <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-                        <div className="mt-2 text-xl font-bold text-white">{value}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-5 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4">
-                    <div className="mb-2 flex items-center gap-2 font-semibold text-cyan-100">
-                      <Settings className="h-4 w-4" /> Calculation Mode
-                    </div>
-                    <p className="text-sm leading-6 text-cyan-50/80">
-                      Kahramaa (Qatar) · XLPE 90°C · Underground pipe · Cg = 0.80 (4 cables grouped)
-                    </p>
-                  </div>
-
-                  <div className="mt-5 rounded-2xl bg-white p-4 text-slate-950">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-semibold">Export SLD</div>
-                        <div className="text-xs text-slate-500">Fully layered AutoCAD DXF</div>
-                      </div>
-                      <Button className="rounded-xl bg-slate-950 text-white hover:bg-slate-800">Export DXF</Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        <section id="features" className="bg-white px-6 py-20 text-slate-950 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mx-auto max-w-3xl text-center">
-              <SectionLabel>Core Features</SectionLabel>
-              <h2 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">Everything in one calculation workflow.</h2>
-              <p className="mt-5 text-lg leading-8 text-slate-600">
-                Replace scattered spreadsheets with a structured platform covering load scheduling, cable design, voltage drop compliance, SLD generation, and client reporting.
-              </p>
-            </div>
-            <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature) => {
-                const Icon = feature.icon;
-                return (
-                  <Card key={feature.title} className="rounded-3xl border-slate-200 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
-                    <CardContent className="p-7">
-                      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-cyan-300">
-                        <Icon className="h-6 w-6" />
-                      </div>
-                      <h3 className="text-xl font-bold">{feature.title}</h3>
-                      <p className="mt-3 leading-7 text-slate-600">{feature.description}</p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        <section id="showcase" className="bg-slate-950 px-6 py-24 text-white lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mx-auto max-w-3xl text-center">
-              <SectionLabel>See It in Action</SectionLabel>
-              <h2 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">
-                Your full distribution network, calculated in one view.
-              </h2>
-              <p className="mt-5 text-lg leading-8 text-slate-400">
-                Real-time voltage drop calculation across your entire distribution hierarchy — from MDB down to final loads — with instant PASS / WARN / FAIL status per circuit.
-              </p>
-            </div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.7, ease: "easeOut" }}
-              className="mt-16 flex justify-center"
-            >
-              <div
-                className="relative w-full max-w-6xl"
-                style={{ perspective: "1200px" }}
-              >
-                <div
-                  className="relative rounded-2xl border border-white/10 shadow-[0_40px_100px_-20px_rgba(34,211,238,0.25),0_20px_60px_-10px_rgba(0,0,0,0.8)]"
-                  style={{ transform: "rotateX(4deg) rotateY(-1deg)" }}
-                >
-                  {/* Fake browser chrome */}
-                  <div className="flex items-center gap-2 rounded-t-2xl border-b border-white/10 bg-slate-800 px-4 py-3">
-                    <span className="h-3 w-3 rounded-full bg-red-500/70" />
-                    <span className="h-3 w-3 rounded-full bg-yellow-500/70" />
-                    <span className="h-3 w-3 rounded-full bg-green-500/70" />
-                    <div className="mx-4 flex-1 rounded-md bg-slate-700 px-3 py-1 text-xs text-slate-400">
-                      app.calcpilot.cc / project / lv-distribution
-                    </div>
-                  </div>
-                  <div className="overflow-hidden rounded-b-2xl">
-                    <img
-                      src="/app-screenshot.png"
-                      alt="CalcPilot load manager showing full distribution hierarchy with voltage drop results"
-                      className="w-full object-cover"
-                      draggable={false}
-                    />
-                  </div>
-                  {/* Subtle edge glow */}
-                  <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/10" />
-                </div>
-              </div>
-            </motion.div>
-
-            <div className="mt-10 flex flex-wrap justify-center gap-6 text-sm text-slate-400">
-              {[
-                ["15", "Loads calculated"],
-                ["6", "Panels in hierarchy"],
-                ["4.49%", "Max VD tracked"],
-                ["Real-time", "PASS / WARN / FAIL"],
-              ].map(([val, label]) => (
-                <div key={label} className="flex flex-col items-center gap-1">
-                  <span className="text-2xl font-bold text-cyan-300">{val}</span>
-                  <span>{label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="standards" className="bg-slate-50 px-6 py-20 text-slate-950 lg:px-8">
-          <div className="mx-auto grid max-w-7xl items-center gap-12 lg:grid-cols-2">
-            <div>
-              <SectionLabel>Standards & Calculation Modes</SectionLabel>
-              <h2 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">Designed for Kahramaa submissions and IEC projects.</h2>
-              <p className="mt-5 text-lg leading-8 text-slate-600">
-                Switch between Kahramaa (Qatar) (official cable tables T10/T11) and IEC 60364 (resistivity method with dynamic derating). Use Custom Cable Data mode when manufacturer datasheets differ from standard tables.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                {standards.map((item) => (
-                  <span key={item} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm">
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-[2rem] bg-slate-950 p-8 text-white shadow-2xl">
-              <div className="text-sm font-medium text-cyan-300">Design Workflow</div>
-              <div className="mt-6 space-y-5">
-                {[
-                  "Build load hierarchy: MDB → SMDB → DB → Final Loads",
-                  "Set system voltage, frequency, calc mode, and max VD%",
-                  "Run calculation engine — instant pass/fail per circuit",
-                  "Apply Auto Cable & Auto MCCB to right-size all circuits",
-                  "Import cable lengths from DXF and re-run calculations",
-                  "Export SLD to AutoCAD and generate client report",
-                ].map((step, index) => (
-                  <div key={step} className="flex gap-4">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-slate-950">{index + 1}</div>
-                    <div className="pt-1 text-slate-200">{step}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="pricing" className="bg-white px-6 py-20 text-slate-950 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mx-auto max-w-3xl text-center">
-              <SectionLabel>Pricing</SectionLabel>
-              <h2 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">Simple plans for engineers and companies.</h2>
-              <p className="mt-5 text-lg leading-8 text-slate-600">Start with a free trial, then upgrade when your team is ready to use the platform on live projects.</p>
-            </div>
-            <div className="mt-14 grid gap-6 lg:grid-cols-3">
-              {pricing.map((plan) => (
-                <Card key={plan.name} className={`rounded-3xl ${plan.highlight ? "border-cyan-300 bg-slate-950 text-white shadow-2xl" : "border-slate-200 bg-white text-slate-950 shadow-sm"}`}>
-                  <CardContent className="p-8">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="text-2xl font-bold">{plan.name}</h3>
-                        <p className={`mt-2 ${plan.highlight ? "text-slate-300" : "text-slate-600"}`}>{plan.description}</p>
-                      </div>
-                      {plan.highlight && <span className="rounded-full bg-cyan-400 px-3 py-1 text-xs font-bold text-slate-950">Popular</span>}
-                    </div>
-                    <div className="mt-7 text-3xl font-bold">{plan.price}</div>
-                    <ul className="mt-7 space-y-3">
-                      {plan.features.map((item) => (
-                        <li key={item} className="flex gap-3">
-                          <CheckCircle2 className={`mt-0.5 h-5 w-5 ${plan.highlight ? "text-cyan-300" : "text-cyan-600"}`} />
-                          <span className={plan.highlight ? "text-slate-200" : "text-slate-700"}>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <a href="/signup" className="block w-full"><Button className={`mt-8 w-full rounded-2xl py-6 ${plan.highlight ? "bg-cyan-400 text-slate-950 hover:bg-cyan-300" : "bg-slate-950 text-white hover:bg-slate-800"}`}>
-                      {plan.cta}
-                    </Button></a>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section id="faq" className="bg-slate-50 px-6 py-20 text-slate-950 lg:px-8">
-          <div className="mx-auto max-w-4xl">
-            <div className="text-center">
-              <SectionLabel>FAQ</SectionLabel>
-              <h2 className="mt-5 text-4xl font-bold tracking-tight md:text-5xl">Questions engineers usually ask.</h2>
-            </div>
-            <div className="mt-12 space-y-4">
-              {faqs.map((faq) => (
-                <div key={faq.q} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <h3 className="text-lg font-bold">{faq.q}</h3>
-                  <p className="mt-3 leading-7 text-slate-600">{faq.a}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-slate-950 px-6 py-20 text-white lg:px-8">
-          <div className="mx-auto max-w-5xl rounded-[2rem] border border-white/10 bg-white/10 p-10 text-center shadow-2xl backdrop-blur-xl md:p-14">
-            <h2 className="text-4xl font-bold tracking-tight md:text-5xl">Ready to streamline your electrical distribution design?</h2>
-            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-300">
-              From load schedule entry to Kahramaa-compliant voltage drop results, SLD diagrams, and client reports — one tool covers the full workflow.
+        <div className="wrap relative pt-20 pb-28 grid lg:grid-cols-[1.05fr_1fr] gap-14 items-start">
+          {/* left: copy */}
+          <div>
+            <div className="eyebrow"><span className="num">[01]</span>Electrical distribution design platform</div>
+            <h1 className="display mt-8 text-white" style={{ fontSize: '88px' }}>
+              The spreadsheet<br />
+              that <em className="text-cyan-300">passes</em><br />
+              Kahramaa.
+            </h1>
+            <p className="mt-9 text-zinc-300 max-w-[520px]" style={{ fontSize: '17px', lineHeight: '1.6' }}>
+              CalcPilot replaces the Excel + AutoCAD + manual VD-table loop with one calculation engine. Build the full <span className="mono text-cyan-300">MDB → SMDB → DB → final&nbsp;load</span> tree, run T10 / T11 in real time, export a layered DXF single-line diagram ready for submission.
             </p>
-            <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
-              <a href="/signup"><Button size="lg" className="rounded-2xl bg-cyan-400 px-7 py-6 text-base font-semibold text-slate-950 hover:bg-cyan-300">
-                Start Free Trial
-              </Button></a>
-              <a href="mailto:support@calcpilot.cc"><Button size="lg" variant="outline" className="rounded-2xl border-white/20 bg-white/5 px-7 py-6 text-base font-semibold text-white hover:bg-white/10">
-                Contact Sales
-              </Button></a>
+            <div className="mt-10 flex flex-wrap items-center gap-6">
+              <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
+              <a href="#preview" className="btn-link">WATCH 90-SEC WALKTHROUGH ↗</a>
             </div>
-          </div>
-        </section>
-      </main>
+            <div className="mt-6 mono text-zinc-500" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
+              NO CREDIT CARD · SAMPLE PROJECT PRE-LOADED · CANCEL ANYTIME
+            </div>
 
-      <footer className="border-t border-white/10 bg-slate-950 px-6 py-10 text-slate-400 lg:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-cyan-400 text-slate-950">
-                <Zap className="h-5 w-5" />
+            {/* live KPI strip */}
+            <div className="mt-14">
+              <div className="mono flex items-center gap-2 text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 live-dot"></span>
+                LIVE · BUILDING_LV_DISTRIBUTION.JSON
               </div>
-              <div>
-                <div className="font-semibold text-white">CalcPilot</div>
-                <div className="text-xs text-slate-500">SLD · Voltage Drop Manager</div>
+              <div className="mt-3 grid grid-cols-4 border rule">
+                <div className="px-4 py-3 border-r rule">
+                  <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>LOADS</div>
+                  <div className="mono font-bold text-white leading-none mt-1.5" style={{ fontSize: '28px' }}>15</div>
+                </div>
+                <div className="px-4 py-3 border-r rule">
+                  <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>PANELS</div>
+                  <div className="mono font-bold text-white leading-none mt-1.5" style={{ fontSize: '28px' }}>6</div>
+                </div>
+                <div className="px-4 py-3 border-r rule">
+                  <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>MAX VD</div>
+                  <div className="mono font-bold text-cyan-300 leading-none mt-1.5" style={{ fontSize: '28px' }}>4.49%</div>
+                </div>
+                <div className="px-4 py-3">
+                  <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>STATUS</div>
+                  <div className="mono font-bold text-emerald-400 leading-none mt-2.5" style={{ fontSize: '16px' }}>● PASS</div>
+                </div>
               </div>
-            </div>
-            <div className="flex flex-wrap justify-center gap-6 text-sm">
-              <a href="/terms" className="hover:text-white transition-colors">Terms of Service</a>
-              <a href="/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
-              <a href="/refund" className="hover:text-white transition-colors">Refund Policy</a>
-              <a href="mailto:info@calcpilot.com" className="hover:text-white transition-colors">info@calcpilot.com</a>
             </div>
           </div>
-          <div className="mt-6 border-t border-white/10 pt-6 text-center text-xs text-slate-600">
-            © 2026 CalcPilot. All rights reserved. Built for electrical engineers worldwide.
+
+          {/* right: product window */}
+          <div className="relative">
+            <div className="surface-deep shadow-2xl overflow-hidden">
+              <div className="winbar">
+                <div className="dots"><span></span><span></span><span></span></div>
+                <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>app.calcpilot · LV-1 ▸ FEEDER TREE</div>
+                <div className="mono text-zinc-600 flex items-center gap-1.5" style={{ fontSize: '10px', letterSpacing: '0.08em' }}><span className="h-1.5 w-1.5 rounded-full bg-red-400 live-dot"></span>REC</div>
+              </div>
+              <div className="px-3 py-2.5 border-b rule grid grid-cols-5 gap-3 mono" style={{ fontSize: '10px', letterSpacing: '0.05em' }}>
+                <div><span className="text-zinc-500">CALC</span> <span className="text-cyan-300">KAHRAMAA</span></div>
+                <div><span className="text-zinc-500">VD%</span> <span className="text-white">1.5 / 5</span></div>
+                <div><span className="text-zinc-500">COND</span> <span className="text-white">CU</span></div>
+                <div><span className="text-zinc-500">INS</span> <span className="text-white">XLPE 90°C</span></div>
+                <div><span className="text-zinc-500">AMB</span> <span className="text-white">40°C</span></div>
+              </div>
+              <div className="tree-row head">
+                <div>LOAD / FEEDER TREE</div><div>TYPE</div><div>CABLE</div><div>VD%</div><div>STATUS</div>
+              </div>
+              <div className="tree-row warn-row"><div className="text-white">○ LV-1</div><div><span className="pill pill-info">MDB</span></div><div className="text-zinc-400">50mm²</div><div className="text-zinc-300">0.0</div><div><span className="pill pill-warn">WARN</span></div></div>
+              <div className="tree-row"><div className="text-zinc-300 pl-4">├─ SMDB-1</div><div><span className="pill pill-magenta">SMDB</span></div><div className="text-zinc-400">16mm²</div><div className="text-zinc-300">0.1</div><div><span className="pill pill-pass">PASS</span></div></div>
+              <div className="tree-row"><div className="text-zinc-300 pl-8">│ ├─ DB-A</div><div><span className="pill pill-warn">DB</span></div><div className="text-zinc-400">6mm²</div><div className="text-zinc-300">0.4</div><div><span className="pill pill-pass">PASS</span></div></div>
+              <div className="tree-row"><div className="text-zinc-400 pl-12">│ │ ├─ POLE-01</div><div><span className="pill pill-pass">LOAD</span></div><div className="text-zinc-400">2.5mm²</div><div className="text-zinc-300">0.7</div><div><span className="pill pill-pass">PASS</span></div></div>
+              <div className="tree-row"><div className="text-zinc-400 pl-12">│ │ └─ POLE-02</div><div><span className="pill pill-pass">LOAD</span></div><div className="text-zinc-400">2.5mm²</div><div className="text-zinc-300">0.8</div><div><span className="pill pill-pass">PASS</span></div></div>
+              <div className="tree-row"><div className="text-zinc-300 pl-4">└─ SMDB-2</div><div><span className="pill pill-magenta">SMDB</span></div><div className="text-zinc-400">25mm²</div><div className="text-zinc-300">0.5</div><div><span className="pill pill-pass">PASS</span></div></div>
+              <div className="tree-row"><div className="text-zinc-300 pl-8">&nbsp; ├─ DB-C</div><div><span className="pill pill-warn">DB</span></div><div className="text-zinc-400">16mm²</div><div className="text-zinc-300">0.6</div><div><span className="pill pill-pass">PASS</span></div></div>
+              <div className="tree-row fail-row"><div className="text-zinc-300 pl-12">&nbsp; │ ├─ LIGHT-01</div><div><span className="pill pill-pass">LOAD</span></div><div className="text-zinc-400">2.5mm²</div><div className="text-red-400">3.3</div><div><span className="pill pill-fail">FAIL</span></div></div>
+              <div className="tree-row fail-row" style={{ borderBottom: 0 }}><div className="text-zinc-300 pl-12">&nbsp; │ └─ LIGHT-02</div><div><span className="pill pill-pass">LOAD</span></div><div className="text-zinc-400">2.5mm²</div><div className="text-red-400">4.5</div><div><span className="pill pill-fail">FAIL</span></div></div>
+              <div className="flex items-center justify-between border-t rule px-3 py-2.5" style={{ background: '#080b11' }}>
+                <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>2 FAILED · AUTO-FIX AVAILABLE</div>
+                <button className="mono font-bold bg-cyan-300 text-slate-950 px-3 py-1.5 hover:bg-cyan-200" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>⚡ AUTO CABLE</button>
+              </div>
+            </div>
+            <div className="mt-3 mono text-zinc-500 text-right" style={{ fontSize: '10px', letterSpacing: '0.12em' }}>FIG. 01 — LOAD MANAGER, LIVE CALCULATION</div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── PROOF BAR ── */}
+      <section className="sect-divider">
+        <div className="wrap py-10">
+          <div className="grid md:grid-cols-[280px_1fr] gap-10 items-center">
+            <div>
+              <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>TRUSTED ON LIVE PROJECTS</div>
+              <div className="serif text-white mt-3" style={{ fontSize: '34px', lineHeight: 1 }}>240<span className="text-cyan-300">+</span></div>
+              <div className="mono text-zinc-400 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>KAHRAMAA SUBMISSIONS · 18 CONSULTANCIES</div>
+            </div>
+            <div className="overflow-hidden relative" style={{ maskImage: 'linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent)' }}>
+              <div className="flex marquee gap-14 whitespace-nowrap items-center">
+                {['ARROW CONSULT','Doha Engineering','QATARA · MEP','Al-Naseem Power','VOLT & CO.','Currents Studio','PHASE 3 GROUP','Khaleej EE',
+                  'ARROW CONSULT','Doha Engineering','QATARA · MEP','Al-Naseem Power','VOLT & CO.','Currents Studio','PHASE 3 GROUP','Khaleej EE'].map((name, i) => (
+                  <span key={i} className={i % 2 === 0 ? 'mono text-zinc-400' : 'serif italic text-zinc-300'} style={{ fontSize: i % 2 === 0 ? '14px' : '20px', letterSpacing: i % 2 === 0 ? '0.18em' : 0 }}>{name}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FEATURES ── */}
+      <section id="features" className="sect-divider">
+        <div className="wrap py-24">
+          <div className="grid lg:grid-cols-12 gap-8 mb-16">
+            <div className="lg:col-span-4">
+              <div className="eyebrow"><span className="num">[02]</span>What's in the box</div>
+            </div>
+            <div className="lg:col-span-8">
+              <h2 className="display text-white" style={{ fontSize: '64px' }}>
+                Six tools that used to be<br />six different software licenses.
+              </h2>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {/* F.01 — VD engine */}
+            <article id="engine" className="grid lg:grid-cols-[1fr_1.1fr] gap-8 border rule p-8 surface">
+              <div className="flex flex-col justify-between">
+                <div>
+                  <div className="mono text-cyan-300" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>F.01 · CALCULATION ENGINE</div>
+                  <h3 className="display mt-4 text-white" style={{ fontSize: '44px' }}>Voltage drop,<br />segment &amp; cumulative.</h3>
+                  <p className="mt-5 text-zinc-400 max-w-[440px]" style={{ fontSize: '15px', lineHeight: '1.65' }}>
+                    Run Kahramaa T10 / T11 (PVC, XLPE) or IEC 60364 resistivity. Cumulative VD% propagates from MDB downward in real time. PASS / WARN / FAIL flips the instant you edit a length.
+                  </p>
+                </div>
+                <div className="mt-8 flex flex-wrap gap-2">
+                  <span className="pill pill-info">T10 PVC</span>
+                  <span className="pill pill-info">T11 XLPE</span>
+                  <span className="pill pill-info">IEC 60364</span>
+                  <span className="pill pill-info">CUSTOM CABLE DATA</span>
+                </div>
+              </div>
+              <div className="surface-deep p-5 mono">
+                <div className="text-zinc-500 mb-3" style={{ letterSpacing: '0.12em', fontSize: '9.5px' }}>VD CALC · LV-1 → DB-C → LIGHT-02</div>
+                <div className="grid gap-2 mb-1 text-zinc-600 pb-2 border-b rule" style={{ gridTemplateColumns: '60px 1fr 70px', fontSize: '9.5px', letterSpacing: '0.08em' }}>
+                  <span>STEP</span><span>SEGMENT</span><span className="text-right">VD</span>
+                </div>
+                {[['SEG-1','LV-1 → SMDB-2 · 60m','0.5%','text-emerald-300'],['SEG-2','SMDB-2 → DB-C · 35m','0.1%','text-emerald-300'],['SEG-3','DB-C → LIGHT-02 · 60m','3.9%','text-amber-300']].map(([s,seg,vd,c]) => (
+                  <div key={s} className="grid gap-2 py-1.5 border-b rule" style={{ gridTemplateColumns: '60px 1fr 70px', fontSize: '11px' }}>
+                    <span className="text-zinc-500">{s}</span><span className="text-zinc-300">{seg}</span><span className={`${c} text-right`}>{vd}</span>
+                  </div>
+                ))}
+                <div className="tech-line my-4"></div>
+                <div className="grid gap-2 mb-1.5" style={{ gridTemplateColumns: '80px 1fr 80px', fontSize: '12px' }}><span className="text-zinc-500">CUM VD%</span><span></span><span className="text-red-400 font-bold text-right">4.5%</span></div>
+                <div className="grid gap-2 mb-1.5" style={{ gridTemplateColumns: '80px 1fr 80px', fontSize: '12px' }}><span className="text-zinc-500">LIMIT</span><span></span><span className="text-zinc-300 text-right">5.0%</span></div>
+                <div className="grid gap-2 mb-3"   style={{ gridTemplateColumns: '80px 1fr 80px', fontSize: '12px' }}><span className="text-zinc-500">MARGIN</span><span></span><span className="text-zinc-300 text-right">0.5%</span></div>
+                <div className="flex items-center justify-between border-t rule pt-3">
+                  <span className="text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>VERDICT</span>
+                  <span className="pill pill-fail">OVER LIMIT</span>
+                </div>
+              </div>
+            </article>
+
+            {/* F.02 — Auto Cable (interactive) */}
+            <article className="grid lg:grid-cols-[1.1fr_1fr] gap-8 border rule p-8 surface">
+              <div className="surface-deep p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="mono text-zinc-500" style={{ fontSize: '9.5px', letterSpacing: '0.12em' }}>⚡ AUTO CABLE · SELECT ALL → FIX</div>
+                  <button onClick={() => setAcFixed(f => !f)} className="mono font-bold bg-cyan-300 text-slate-950 px-3 py-1.5 hover:bg-cyan-200" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>
+                    {acFixed ? '↻ RESET' : '▶ RUN'}
+                  </button>
+                </div>
+                <div className="mono" style={{ fontSize: '11px' }}>
+                  <div className="grid gap-2 py-1.5 border-b rule text-zinc-600" style={{ gridTemplateColumns: '1fr 90px 90px 60px', fontSize: '9.5px', letterSpacing: '0.08em' }}>
+                    <span>LOAD</span><span>CABLE</span><span>VD%</span><span>STATUS</span>
+                  </div>
+                  {rows.map(r => (
+                    <div key={r.load} className="grid gap-2 py-2 border-b rule items-center" style={{ gridTemplateColumns: '1fr 90px 90px 60px', transition: 'background-color 0.4s ease', backgroundColor: acFixed ? 'rgba(126,211,247,0.04)' : '' }}>
+                      <span className="text-zinc-300">{r.load}</span>
+                      <span className="text-zinc-300">{r.cable}</span>
+                      <span className={r.vdClass}>{r.vd}</span>
+                      <span><StatusPill status={r.status} /></span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 border-t rule pt-3 mono flex items-center justify-between" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>
+                  {acFixed
+                    ? <><span className="text-emerald-300">4 CIRCUITS · 4 PASS · 0 ISSUES</span><span className="text-zinc-600">RESIZED IN 240 ms</span></>
+                    : <><span className="text-zinc-500">4 CIRCUITS · 2 FAIL · 2 WARN</span><span className="text-zinc-600">Cg=0.80 · Cd=0.94 · Ka=0.96</span></>
+                  }
+                </div>
+              </div>
+              <div className="flex flex-col justify-between">
+                <div>
+                  <div className="mono text-cyan-300" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>F.02 · AUTOMATION</div>
+                  <h3 className="display mt-4 text-white" style={{ fontSize: '44px' }}>Right-size every cable in one click.</h3>
+                  <p className="mt-5 text-zinc-400 max-w-[440px]" style={{ fontSize: '15px', lineHeight: '1.65' }}>
+                    Select all, hit <span className="mono text-cyan-300">⚡ AUTO CABLE</span>. The engine picks the smallest cable that satisfies cumulative VD%, ampacity with derating, and your installation method. Same loop for MCCBs.
+                  </p>
+                </div>
+                <div className="mt-8 text-zinc-500 leading-relaxed mono" style={{ fontSize: '13px' }}>
+                  <span className="text-zinc-400">→</span> Try it: hit RUN on the specimen.<br />
+                  <span className="text-zinc-600">Derating: Cg · Cd · Ka applied per row.</span>
+                </div>
+              </div>
+            </article>
+
+            {/* F.03 — SLD / DXF */}
+            <article className="grid lg:grid-cols-[1fr_1.1fr] gap-8 border rule p-8 surface">
+              <div className="flex flex-col justify-between">
+                <div>
+                  <div className="mono text-cyan-300" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>F.03 · OUTPUT</div>
+                  <h3 className="display mt-4 text-white" style={{ fontSize: '44px' }}>Layered DXF,<br />ready for AutoCAD.</h3>
+                  <p className="mt-5 text-zinc-400 max-w-[440px]" style={{ fontSize: '15px', lineHeight: '1.65' }}>
+                    Busbars, feeders, equipment symbols, tags, and notes each ship on their own CAD layer. Open in any version of AutoCAD; toggle, recolor, plot independently. Submission-ready.
+                  </p>
+                </div>
+                <div className="mt-8 flex flex-wrap gap-2">
+                  {['L_BUSBAR','L_FEEDER','L_EQUIPMENT','L_TAG','L_NOTES'].map(l => <span key={l} className="pill pill-info">{l}</span>)}
+                </div>
+              </div>
+              <div className="surface-deep p-5 relative overflow-hidden">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="mono text-zinc-500" style={{ fontSize: '9.5px', letterSpacing: '0.12em' }}>SLD PREVIEW · BUILDING LV DISTRIBUTION</div>
+                  <div className="mono text-zinc-600" style={{ fontSize: '9.5px', letterSpacing: '0.12em' }}>DWG-001 · REV A</div>
+                </div>
+                <svg viewBox="0 0 520 240" className="w-full schem" style={{ height: '220px' }}>
+                  <rect x="6" y="6" width="508" height="228" fill="none" stroke="#1a1f27" strokeDasharray="3 3" />
+                  <line x1="40" y1="50" x2="490" y2="50" stroke="#7ed3f7" strokeWidth="2.5" />
+                  <text x="40" y="40" fill="#7ed3f7" fontFamily="JetBrains Mono" fontSize="10">LV-1 · 415V · 350A · MDB</text>
+                  <g stroke="#3a4150" strokeWidth="1.2" fill="none">
+                    <line x1="100" y1="50" x2="100" y2="110" /><line x1="260" y1="50" x2="260" y2="110" /><line x1="420" y1="50" x2="420" y2="110" />
+                  </g>
+                  <g fill="#06080b" stroke="#7ed3f7" strokeWidth="1">
+                    <rect x="92" y="68" width="16" height="16" /><rect x="252" y="68" width="16" height="16" /><rect x="412" y="68" width="16" height="16" />
+                  </g>
+                  <g fontFamily="JetBrains Mono" fontSize="8" fill="#7ed3f7" textAnchor="middle">
+                    <text x="100" y="79">50A</text><text x="260" y="79">63A</text><text x="420" y="79">125A</text>
+                  </g>
+                  <g fontFamily="JetBrains Mono" fontSize="9" textAnchor="middle">
+                    <rect x="65" y="110" width="70" height="36" fill="#1a140a" stroke="#f5d878" /><text x="100" y="133" fill="#f5d878">SMDB-1</text>
+                    <rect x="225" y="110" width="70" height="36" fill="#1a140a" stroke="#f5d878" /><text x="260" y="133" fill="#f5d878">SMDB-2</text>
+                    <rect x="385" y="110" width="70" height="36" fill="#1a0a0a" stroke="#ff8a8a" /><text x="420" y="133" fill="#ff8a8a">DB-C</text>
+                  </g>
+                  <g stroke="#3a4150" strokeWidth="1" fill="none">
+                    <path d="M 100 146 L 100 175 L 70 175 L 70 200" /><path d="M 100 175 L 130 175 L 130 200" />
+                    <path d="M 260 146 L 260 200" />
+                    <path d="M 420 146 L 420 175 L 385 175 L 385 200" stroke="#ff8a8a" /><path d="M 420 175 L 455 175 L 455 200" stroke="#ff8a8a" />
+                  </g>
+                  <g fontFamily="JetBrains Mono" fontSize="7.5" fill="#9ca3af" textAnchor="middle">
+                    <circle cx="70"  cy="208" r="4" fill="#0a0d12" stroke="#7ee787" /><circle cx="130" cy="208" r="4" fill="#0a0d12" stroke="#7ee787" />
+                    <circle cx="260" cy="208" r="4" fill="#0a0d12" stroke="#7ee787" />
+                    <circle cx="385" cy="208" r="4" fill="#0a0d12" stroke="#ff8a8a" /><circle cx="455" cy="208" r="4" fill="#0a0d12" stroke="#ff8a8a" />
+                    <text x="70" y="225">POLE-01</text><text x="130" y="225">POLE-02</text><text x="260" y="225">POLE-04</text>
+                    <text x="385" y="225" fill="#ff8a8a">LIGHT-01</text><text x="455" y="225" fill="#ff8a8a">LIGHT-02</text>
+                  </g>
+                </svg>
+                <div className="mt-2 flex justify-between mono text-zinc-600 pt-2 border-t rule" style={{ fontSize: '9px', letterSpacing: '0.12em' }}>
+                  <span>SHEET 01 OF 04</span><span>SCALE NTS</span><span>EXPORT · DXF · 124 KB</span>
+                </div>
+              </div>
+            </article>
+
+            {/* Small features grid */}
+            <div className="grid md:grid-cols-3 gap-6 mt-2">
+              {[['F.04','DXF Import','Pull cable lengths from AutoCAD. Label matching maps drawing labels to your load schedule. Preview every match before applying.'],
+                ['F.05','Reports & BOM','Submission-grade PDFs and an itemized bill of materials with cost breakdown by size, run length, and installation method.'],
+                ['F.06','Load Manager','Inline editing, bulk operations, undo / redo, search-filter by status. Built to handle real schedules, not toy examples.']].map(([n,t,d]) => (
+                <div key={n} className="border rule p-6 surface">
+                  <div className="mono text-cyan-300" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>{n}</div>
+                  <h4 className="mt-3 text-white font-semibold tracking-tight" style={{ fontSize: '20px' }}>{t}</h4>
+                  <p className="mt-3 text-zinc-400" style={{ fontSize: '13.5px', lineHeight: '1.6' }}>{d}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── PREVIEW ── */}
+      <section id="preview" className="sect-divider">
+        <div className="wrap py-24">
+          <div className="grid lg:grid-cols-12 gap-8 mb-12">
+            <div className="lg:col-span-4">
+              <div className="eyebrow"><span className="num">[03]</span>The actual interface</div>
+            </div>
+            <div className="lg:col-span-8">
+              <h2 className="display text-white" style={{ fontSize: '64px' }}>
+                Your full distribution network,<br /><em className="text-cyan-300">calculated</em> in one view.
+              </h2>
+              <p className="mt-6 text-zinc-400 max-w-[640px]" style={{ fontSize: '15px', lineHeight: '1.65' }}>
+                Real-time voltage drop calculation across the entire hierarchy — from MDB down to final loads — with instant PASS / WARN / FAIL on every circuit.
+              </p>
+            </div>
+          </div>
+          <div className="relative surface-deep overflow-hidden">
+            <div className="winbar">
+              <div className="dots"><span></span><span></span><span></span></div>
+              <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>app.calcpilot.cc / project / building-lv-distribution</div>
+              <div className="mono text-zinc-600" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>⌘K</div>
+            </div>
+            <div className="relative">
+              <img src="/app-screenshot.png" alt="CalcPilot load manager showing full distribution hierarchy" className="w-full block" draggable="false" />
+              <div className="absolute hotspot" style={{ top: '53%', left: '89%', width: '14px', height: '14px', borderRadius: '999px', background: '#7ed3f7' }}></div>
+              <div className="absolute hotspot" style={{ top: '47%', left: '80%', width: '14px', height: '14px', borderRadius: '999px', background: '#7ed3f7' }}></div>
+              <div className="absolute hotspot" style={{ top: '17%', left: '11%', width: '14px', height: '14px', borderRadius: '999px', background: '#7ed3f7' }}></div>
+            </div>
+          </div>
+          <div className="mt-6 grid md:grid-cols-3 gap-4 mono" style={{ fontSize: '11.5px', lineHeight: '1.55' }}>
+            {[['01','PASS / WARN / FAIL','Every circuit flagged in real time as you edit lengths, cable sizes, or installation methods.'],
+              ['02','CUMULATIVE VD%','Propagates from MDB down. See where a deep run overshoots the limit, not just per-segment.'],
+              ['03','⚡ AUTO CABLE','One click rewrites every cable size in the schedule to the minimum that passes ampacity + VD limits.']].map(([n,t,d]) => (
+              <div key={n} className="flex gap-3 border-t rule pt-4">
+                <span className="text-cyan-300 font-bold">●&nbsp;{n}</span>
+                <div>
+                  <div className="text-zinc-200" style={{ letterSpacing: '0.05em' }}>{t}</div>
+                  <div className="text-zinc-500 mt-0.5" style={{ fontFamily: '"Inter Tight"', letterSpacing: 0 }}>{d}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── STANDARDS ── */}
+      <section id="standards" className="sect-divider">
+        <div className="wrap py-24">
+          <div className="grid lg:grid-cols-12 gap-8 mb-12">
+            <div className="lg:col-span-4">
+              <div className="eyebrow"><span className="num">[04]</span>Standards &amp; Modes</div>
+            </div>
+            <div className="lg:col-span-8">
+              <h2 className="display text-white" style={{ fontSize: '64px' }}>Designed for Kahramaa.<br />Compatible with <em>IEC</em>.</h2>
+            </div>
+          </div>
+          <div className="grid lg:grid-cols-2 gap-8">
+            <div className="border rule p-8 surface">
+              <p className="text-zinc-400" style={{ fontSize: '15px', lineHeight: '1.65' }}>
+                Switch between modes per project. Kahramaa uses the official cable tables T10 (PVC) / T11 (XLPE) with fixed ampacity per installation method. IEC 60364 runs the resistivity method with dynamic derating. Custom mode lets you load manufacturer datasheets.
+              </p>
+              <div className="mt-8">
+                <div className="mono text-zinc-500 mb-2" style={{ fontSize: '10px', letterSpacing: '0.15em' }}>SELECT MODE</div>
+                <div className="inline-flex border rule p-1 surface-deep">
+                  {[['kahramaa','KAHRAMAA'],['iec','IEC 60364'],['custom','CUSTOM']].map(([k,label]) => (
+                    <button key={k} onClick={() => setMode(k)}
+                      className={`px-4 py-2 mono font-bold transition-all ${mode === k ? 'bg-cyan-300 text-slate-950' : 'text-zinc-400 hover:text-white'}`}
+                      style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-10">
+                <div className="mono text-cyan-300" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>DESIGN WORKFLOW</div>
+                <div className="mt-5 space-y-3">
+                  {[['01',<>Build load hierarchy: <span className="mono text-zinc-400">MDB → SMDB → DB → loads</span></>],['02','Set system voltage, calc mode, and max VD%'],['03','Run calc engine — instant pass / fail per circuit'],['04','Apply ⚡ Auto Cable & Auto MCCB across selection'],['05','Import lengths from DXF, re-run calculations'],['06','Export layered SLD + client report']].map(([n,t]) => (
+                    <div key={n} className="flex gap-4 items-start">
+                      <span className="mono text-zinc-500 mt-1" style={{ fontSize: '10px' }}>{n}</span>
+                      <div className="text-zinc-300" style={{ fontSize: '14px' }}>{t}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="surface-deep p-6 flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.15em' }}>SAMPLE · DB-A → POLE-03 · 50m</div>
+                <span className={m.pillClass}>{m.label}</span>
+              </div>
+              <div className="mono space-y-2" style={{ fontSize: '12px' }}>
+                {[['METHOD',m.method,'text-zinc-200'],['CABLE','2.5mm² · CU · XLPE','text-zinc-200'],['LOAD','5 A · 0.85 PF','text-zinc-200'],['DERATING',m.derate,'text-zinc-200'],['SEG VD',m.seg,m.segC],['CUM VD',m.cum,m.cumC]].map(([k,v,c]) => (
+                  <div key={k} className="flex justify-between border-b rule py-1.5">
+                    <span className="text-zinc-500">{k}</span><span className={c}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="tech-line my-5"></div>
+              <div className="serif text-emerald-400" style={{ fontSize: '58px', lineHeight: 1 }}>PASS</div>
+              <div className="mono text-zinc-500 mt-2" style={{ fontSize: '10px', letterSpacing: '0.12em' }}>VERDICT · WITHIN 5.0% CUMULATIVE LIMIT</div>
+              <div className="mt-auto pt-6 mono text-zinc-600" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>Switch modes — same circuit, methodology &amp; verdict update live.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── PRICING ── */}
+      <section id="pricing" className="sect-divider">
+        <div className="wrap py-24">
+          <div className="grid lg:grid-cols-12 gap-8 mb-12">
+            <div className="lg:col-span-4"><div className="eyebrow"><span className="num">[05]</span>Pricing</div></div>
+            <div className="lg:col-span-8">
+              <h2 className="display text-white" style={{ fontSize: '64px' }}>Honest plans for engineers<br />and engineering firms.</h2>
+              <p className="mt-6 text-zinc-400 max-w-[560px]" style={{ fontSize: '15px', lineHeight: '1.65' }}>Pricing in QAR. All plans include Kahramaa, IEC 60364, DXF import / export, and the full report generator.</p>
+            </div>
+          </div>
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Trial */}
+            <div className="plan-card border rule p-8 surface flex flex-col">
+              <div className="flex items-center justify-between">
+                <div className="mono text-zinc-400" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>TRIAL</div>
+                <span className="pill pill-info">FREE</span>
+              </div>
+              <div className="mt-6">
+                <div className="display text-white" style={{ fontSize: '56px' }}>QAR 0</div>
+                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>14 DAYS · NO CARD</div>
+              </div>
+              <p className="mt-5 text-zinc-400" style={{ fontSize: '14px', lineHeight: '1.6' }}>Evaluate the calculation engine on a real project.</p>
+              <ul className="mt-6 space-y-3 text-zinc-300" style={{ fontSize: '13.5px' }}>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Up to 30 loads / project</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Kahramaa &amp; IEC modes</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Sample report export (watermarked)</li>
+                <li className="flex gap-3"><span className="text-zinc-700 mono mt-0.5">×</span><span className="text-zinc-500">DXF import / SLD export</span></li>
+                <li className="flex gap-3"><span className="text-zinc-700 mono mt-0.5">×</span><span className="text-zinc-500">Cost estimation module</span></li>
+              </ul>
+              <Link to="/signup" className="mt-8 block"><button className="btn-ghost w-full">START FREE TRIAL</button></Link>
+            </div>
+            {/* Pro */}
+            <div className="relative plan-card border p-8 flex flex-col" style={{ borderColor: '#7ed3f7', background: 'linear-gradient(180deg, rgba(126,211,247,0.04), transparent 60%), #0a0d12' }}>
+              <div className="absolute -top-3 left-8 mono font-bold bg-cyan-300 text-slate-950 px-2.5 py-1" style={{ fontSize: '10px', letterSpacing: '0.15em' }}>MOST USED</div>
+              <div className="flex items-center justify-between">
+                <div className="mono text-cyan-300" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>PRO</div>
+                <span className="pill pill-info">MONTHLY</span>
+              </div>
+              <div className="mt-6">
+                <div className="display text-white" style={{ fontSize: '56px' }}>QAR 299<span className="text-zinc-500" style={{ fontSize: '20px' }}> / mo</span></div>
+                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>PER ENGINEER · ANNUAL 20% OFF</div>
+              </div>
+              <p className="mt-5 text-zinc-300" style={{ fontSize: '14px', lineHeight: '1.6' }}>For individual engineers running live submissions.</p>
+              <ul className="mt-6 space-y-3 text-zinc-200" style={{ fontSize: '13.5px' }}>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Unlimited projects &amp; loads</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>⚡ Auto Cable &amp; Auto MCCB</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>DXF import &amp; layered SLD export</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>PDF &amp; Excel report export</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Cost estimation module</li>
+              </ul>
+              <Link to="/signup" className="mt-8 block"><button className="btn-primary w-full">START 14-DAY TRIAL →</button></Link>
+            </div>
+            {/* Team */}
+            <div className="plan-card border rule p-8 surface flex flex-col">
+              <div className="flex items-center justify-between">
+                <div className="mono text-zinc-400" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>TEAM</div>
+                <span className="pill pill-magenta">QUOTED</span>
+              </div>
+              <div className="mt-6">
+                <div className="display text-white" style={{ fontSize: '56px' }}>QAR 5–25k</div>
+                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>PER YEAR · BY PROJECT SIZE</div>
+              </div>
+              <p className="mt-5 text-zinc-400" style={{ fontSize: '14px', lineHeight: '1.6' }}>For consultancies &amp; engineering firms.</p>
+              <ul className="mt-6 space-y-3 text-zinc-300" style={{ fontSize: '13.5px' }}>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Everything in Pro</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Multi-user, SSO, admin dashboard</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Shared project library &amp; templates</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Company report branding</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Priority support &amp; onboarding</li>
+              </ul>
+              <button className="btn-ghost mt-8 w-full">BOOK 20-MIN DEMO</button>
+            </div>
+          </div>
+          <div className="mt-8 mono text-zinc-500 flex flex-wrap gap-6 justify-center" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
+            <span>14-DAY FREE TRIAL · NO CARD</span><span className="text-zinc-700">·</span>
+            <span>30-DAY MONEY-BACK ON ANNUAL</span><span className="text-zinc-700">·</span>
+            <span>YOUR DATA EXPORTS AS JSON, ALWAYS</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section id="faq" className="sect-divider">
+        <div className="wrap py-24">
+          <div className="grid lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-4">
+              <div className="eyebrow"><span className="num">[06]</span>Objections, answered</div>
+              <h2 className="display text-white mt-6" style={{ fontSize: '56px' }}>Questions<br />engineers ask<br />before signing.</h2>
+            </div>
+            <div className="lg:col-span-8 space-y-1">
+              {[
+                ['Will Kahramaa accept this as the calculation source on submission drawings?','Yes. Kahramaa mode uses the official T10 (PVC) and T11 (XLPE) cable tables with fixed ampacity per installation method. Reports include the table reference, derating chain, and verdict on every circuit — exactly what reviewers look for.',true],
+                ['Can I import cable lengths from a CAD drawing?','Yes. The DXF import module reads cable lengths directly from AutoCAD drawings and matches them to your load schedule using intelligent label recognition. Preview every match before confirming, then re-run in one click.',false],
+                ['How does Auto Cable actually pick the size?','Auto Cable iterates the standard cable size ladder and picks the smallest cross-section satisfying (a) ampacity with derating Cg · Cd · Ka, and (b) your defined VD% limit — segment or cumulative. Same algorithm for Auto MCCB.',false],
+                ["What about a third-party reviewer who doesn't use CalcPilot?",'Every project exports to a transparent PDF report and an Excel workbook with editable inputs. Reviewers can audit every number without an account. SLDs export as standards-compliant layered DXF.',false],
+                ['What happens to my project data if I cancel?',"Your data exports as JSON at any time — no vendor lock-in. After cancellation we keep your projects read-only for 90 days. After that, everything is deleted.",false],
+                ['Can I export the SLD to AutoCAD?','Yes. The SLD Generator exports a layered DXF — busbars, feeders, equipment symbols, tags, and notes each on their own CAD layer. Opens cleanly in AutoCAD 2010 onward.',false],
+              ].map(([q,a,open],i) => (
+                <details key={i} className="group border-t rule py-6" {...(open ? {open:true} : {})}>
+                  <summary className="flex justify-between items-center cursor-pointer list-none">
+                    <span className="text-white font-medium pr-6" style={{ fontSize: '18px' }}>{q}</span>
+                    <span className="chev text-cyan-300 mono leading-none" style={{ fontSize: '22px' }}>+</span>
+                  </summary>
+                  <p className="mt-4 text-zinc-400 max-w-[640px]" style={{ fontSize: '14.5px', lineHeight: '1.65' }}>{a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FINAL CTA ── */}
+      <section className="sect-divider">
+        <div className="wrap py-24">
+          <div className="relative border rule p-14 lg:p-20 surface overflow-hidden">
+            <div className="absolute inset-0 gridbg opacity-50 pointer-events-none"></div>
+            <div className="absolute -top-32 -right-20 w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: 'radial-gradient(circle, rgba(126,211,247,0.10), transparent 60%)' }}></div>
+            <div className="relative grid lg:grid-cols-[1.3fr_1fr] gap-12 items-center">
+              <div>
+                <div className="eyebrow"><span className="num">[07]</span>Start today</div>
+                <h2 className="display text-white mt-7" style={{ fontSize: '64px' }}>Stop calculating<br />in <em className="text-cyan-300">Excel</em>.</h2>
+                <p className="mt-7 text-zinc-300 max-w-[480px]" style={{ fontSize: '16px', lineHeight: '1.65' }}>
+                  Load schedule, voltage drop, Auto Cable, layered SLD, Kahramaa-ready report — one platform, one workflow, one submission.
+                </p>
+                <div className="mt-9 flex flex-wrap gap-5 items-center">
+                  <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
+                  <a href="mailto:info@calcpilot.com" className="btn-link">BOOK 20-MIN DEMO ↗</a>
+                </div>
+              </div>
+              <div className="surface-deep p-6">
+                <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.15em' }}>WHAT YOU GET ON DAY 1</div>
+                <div className="mt-5 space-y-3">
+                  {['14-day full-feature trial','Sample Kahramaa project pre-loaded','Step-by-step submission checklist','Cable sizing guide (PDF · 24pp)','Direct line to the engineer who built it'].map(t => (
+                    <div key={t} className="flex gap-3" style={{ fontSize: '14px' }}><span className="text-cyan-300 mono">→</span><span className="text-zinc-200">{t}</span></div>
+                  ))}
+                </div>
+                <div className="tech-line my-6"></div>
+                <div className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.12em' }}>NO CARD · NO CALL · CANCEL ANYTIME</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FOOTER ── */}
+      <footer className="sect-divider" style={{ background: '#020409' }}>
+        <div className="wrap py-16">
+          <div className="grid lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr] gap-10">
+            <div>
+              <div className="mono font-bold tracking-tight flex items-center gap-1.5" style={{ fontSize: '18px' }}>
+                <span className="text-cyan-300">SLD</span><span className="text-zinc-700">·</span><span className="text-pink-400">VD</span>
+              </div>
+              <div className="mt-3 font-semibold tracking-tight" style={{ fontSize: '14px' }}>CalcPilot</div>
+              <div className="mono text-zinc-500 mt-1" style={{ fontSize: '10px', letterSpacing: '0.15em' }}>EE DESIGN PLATFORM · DOHA</div>
+              <p className="mt-6 text-zinc-500 max-w-[280px]" style={{ fontSize: '13px', lineHeight: '1.6' }}>
+                Built by a Qatar-based electrical engineer who got tired of recalculating VD% in spreadsheets the night before submission.
+              </p>
+              <div className="mt-6 mono text-zinc-500 flex items-center gap-2" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 live-dot"></span>ALL SYSTEMS NORMAL
+              </div>
+            </div>
+            <div>
+              <div className="mono text-zinc-500 mb-4" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>PRODUCT</div>
+              <ul className="space-y-2.5 text-zinc-300" style={{ fontSize: '13.5px' }}>
+                <li><a href="#features"  className="hover:text-cyan-300">Features</a></li>
+                <li><a href="#engine"    className="hover:text-cyan-300">Calc Engine</a></li>
+                <li><a href="#standards" className="hover:text-cyan-300">Standards</a></li>
+                <li><a href="#pricing"   className="hover:text-cyan-300">Pricing</a></li>
+                <li><a href="#changelog" className="hover:text-cyan-300">Changelog</a></li>
+              </ul>
+            </div>
+            <div>
+              <div className="mono text-zinc-500 mb-4" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>RESOURCES</div>
+              <ul className="space-y-2.5 text-zinc-300" style={{ fontSize: '13.5px' }}>
+                <li><a className="hover:text-cyan-300 cursor-pointer">Cable Sizing Guide</a></li>
+                <li><a className="hover:text-cyan-300 cursor-pointer">Kahramaa Checklist</a></li>
+                <li><a className="hover:text-cyan-300 cursor-pointer">IEC vs Kahramaa</a></li>
+                <li><a className="hover:text-cyan-300 cursor-pointer">DXF Import Specs</a></li>
+                <li><a className="hover:text-cyan-300 cursor-pointer">Sample Projects</a></li>
+              </ul>
+            </div>
+            <div>
+              <div className="mono text-zinc-500 mb-4" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>COMPANY</div>
+              <ul className="space-y-2.5 text-zinc-300" style={{ fontSize: '13.5px' }}>
+                <li><a className="hover:text-cyan-300 cursor-pointer">About</a></li>
+                <li><a className="hover:text-cyan-300 cursor-pointer">Customers</a></li>
+                <li><a href="mailto:info@calcpilot.com" className="hover:text-cyan-300">Contact</a></li>
+                <li><a className="hover:text-cyan-300 cursor-pointer">Status</a></li>
+              </ul>
+            </div>
+            <div>
+              <div className="mono text-zinc-500 mb-4" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>LEGAL</div>
+              <ul className="space-y-2.5 text-zinc-300" style={{ fontSize: '13.5px' }}>
+                <li><Link to="/terms"   className="hover:text-cyan-300">Terms of Service</Link></li>
+                <li><Link to="/privacy" className="hover:text-cyan-300">Privacy Policy</Link></li>
+                <li><Link to="/refund"  className="hover:text-cyan-300">Refund Policy</Link></li>
+                <li><a className="hover:text-cyan-300 cursor-pointer">DPA</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t rule mt-14 pt-6 flex flex-wrap items-center justify-between gap-4 mono text-zinc-600" style={{ fontSize: '10.5px', letterSpacing: '0.12em' }}>
+            <div>© 2026 CALCPILOT · BUILT FOR ELECTRICAL ENGINEERS WORLDWIDE</div>
+            <div>QAR · DOHA, QATAR · INFO@CALCPILOT.COM</div>
           </div>
         </div>
       </footer>
+
     </div>
   );
 }

@@ -6,7 +6,13 @@ export default {
     './components/**/*.{js,jsx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans:  ['"Inter Tight"', 'system-ui', 'sans-serif'],
+        mono:  ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        serif: ['"Instrument Serif"', 'serif'],
+      },
+    },
   },
   plugins: [],
 }
