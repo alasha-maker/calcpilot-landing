@@ -484,8 +484,8 @@ export default function CalcPilotLandingPage() {
                 <span className="pill pill-info">FREE</span>
               </div>
               <div className="mt-6">
-                <div className="display text-white" style={{ fontSize: '56px' }}>QAR 0</div>
-                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>14 DAYS · NO CARD</div>
+                <div className="display text-white" style={{ fontSize: '56px' }}>$0</div>
+                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>1 MONTH TRIAL · NO CARD</div>
               </div>
               <p className="mt-5 text-zinc-400" style={{ fontSize: '14px', lineHeight: '1.6' }}>Evaluate the calculation engine on a real project.</p>
               <ul className="mt-6 space-y-3 text-zinc-300" style={{ fontSize: '13.5px' }}>
@@ -497,16 +497,16 @@ export default function CalcPilotLandingPage() {
               </ul>
               <Link to="/signup" className="mt-8 block"><button className="btn-ghost w-full">START FREE TRIAL</button></Link>
             </div>
-            {/* Pro */}
+            {/* Standard Monthly */}
             <div className="relative plan-card border p-8 flex flex-col" style={{ borderColor: '#7ed3f7', background: 'linear-gradient(180deg, rgba(126,211,247,0.04), transparent 60%), #0a0d12' }}>
               <div className="absolute -top-3 left-8 mono font-bold bg-cyan-300 text-slate-950 px-2.5 py-1" style={{ fontSize: '10px', letterSpacing: '0.15em' }}>MOST USED</div>
               <div className="flex items-center justify-between">
-                <div className="mono text-cyan-300" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>PRO</div>
+                <div className="mono text-cyan-300" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>STANDARD</div>
                 <span className="pill pill-info">MONTHLY</span>
               </div>
               <div className="mt-6">
-                <div className="display text-white" style={{ fontSize: '56px' }}>QAR 299<span className="text-zinc-500" style={{ fontSize: '20px' }}> / mo</span></div>
-                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>PER ENGINEER · ANNUAL 20% OFF</div>
+                <div className="display text-white" style={{ fontSize: '56px' }}>$12<span className="text-zinc-500" style={{ fontSize: '20px' }}> / mo</span></div>
+                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>1 MONTH FREE TRIAL · NO CARD</div>
               </div>
               <p className="mt-5 text-zinc-300" style={{ fontSize: '14px', lineHeight: '1.6' }}>For individual engineers running live submissions.</p>
               <ul className="mt-6 space-y-3 text-zinc-200" style={{ fontSize: '13.5px' }}>
@@ -516,32 +516,30 @@ export default function CalcPilotLandingPage() {
                 <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>PDF &amp; Excel report export</li>
                 <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Cost estimation module</li>
               </ul>
-              <Link to="/signup" className="mt-8 block"><button className="btn-primary w-full">START 14-DAY TRIAL →</button></Link>
+              <Link to="/signup" className="mt-8 block"><button className="btn-primary w-full">START FREE TRIAL →</button></Link>
             </div>
-            {/* Team */}
+            {/* Standard Annual */}
             <div className="plan-card border rule p-8 surface flex flex-col">
               <div className="flex items-center justify-between">
-                <div className="mono text-zinc-400" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>TEAM</div>
-                <span className="pill pill-magenta">QUOTED</span>
+                <div className="mono text-zinc-400" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>STANDARD</div>
+                <span className="pill pill-pass">ANNUAL</span>
               </div>
               <div className="mt-6">
-                <div className="display text-white" style={{ fontSize: '56px' }}>QAR 5–25k</div>
-                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>PER YEAR · BY PROJECT SIZE</div>
+                <div className="display text-white" style={{ fontSize: '56px' }}>$50<span className="text-zinc-500" style={{ fontSize: '20px' }}> / yr</span></div>
+                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>1 MONTH FREE TRIAL · SAVE 65%</div>
               </div>
-              <p className="mt-5 text-zinc-400" style={{ fontSize: '14px', lineHeight: '1.6' }}>For consultancies &amp; engineering firms.</p>
+              <p className="mt-5 text-zinc-400" style={{ fontSize: '14px', lineHeight: '1.6' }}>Best value — pay once a year, save vs. monthly.</p>
               <ul className="mt-6 space-y-3 text-zinc-300" style={{ fontSize: '13.5px' }}>
-                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Everything in Pro</li>
-                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Multi-user, SSO, admin dashboard</li>
-                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Shared project library &amp; templates</li>
-                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Company report branding</li>
-                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Priority support &amp; onboarding</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Everything in Standard Monthly</li>
+                <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Priority support</li>
+                <li className="flex gap-3"><span className="text-emerald-400 mono mt-0.5">↓</span><span className="text-emerald-400">~$4.17 / mo effective rate</span></li>
               </ul>
-              <button className="btn-ghost mt-8 w-full">BOOK 20-MIN DEMO</button>
+              <Link to="/signup" className="mt-8 block"><button className="btn-ghost w-full">START FREE TRIAL →</button></Link>
             </div>
           </div>
           <div className="mt-8 mono text-zinc-500 flex flex-wrap gap-6 justify-center" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
-            <span>14-DAY FREE TRIAL · NO CARD</span><span className="text-zinc-700">·</span>
-            <span>30-DAY MONEY-BACK ON ANNUAL</span><span className="text-zinc-700">·</span>
+            <span>1 MONTH FREE TRIAL · NO CARD REQUIRED</span><span className="text-zinc-700">·</span>
+            <span>CANCEL ANYTIME</span><span className="text-zinc-700">·</span>
             <span>YOUR DATA EXPORTS AS JSON, ALWAYS</span>
           </div>
         </div>
