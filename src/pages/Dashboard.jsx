@@ -213,6 +213,28 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* ── Manage Subscription — show when already subscribed with billing ── */}
+        {hasBilling && isActive && (
+          <div className="surface p-6">
+            <div className="mono text-emerald-400 mb-1" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>MANAGE SUBSCRIPTION</div>
+            <p className="text-zinc-400 mb-5" style={{ fontSize: '13px', lineHeight: '1.6' }}>
+              Your subscription is active. To cancel, upgrade, or update your payment method, use the link in your LemonSqueezy receipt email, or contact support.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <a href="https://app.lemonsqueezy.com/billing" target="_blank" rel="noopener noreferrer"
+                className="mono text-cyan-300 hover:text-cyan-200 transition-colors"
+                style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none', border: '1px solid rgba(126,211,247,0.25)', padding: '8px 16px' }}>
+                BILLING PORTAL →
+              </a>
+              <a href="mailto:support@calcpilot.cc"
+                className="mono text-zinc-400 hover:text-white transition-colors"
+                style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none', border: '1px solid #1a1f27', padding: '8px 16px' }}>
+                EMAIL SUPPORT
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* ── Billing Setup — show when no payment method OR subscription inactive ── */}
         {(!hasBilling || !isActive) && (
           <div className="surface p-6" style={{ border: '1px solid rgba(126,211,247,0.15)' }}>

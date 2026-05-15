@@ -102,11 +102,11 @@ async function handleSessionExchange(request, env, corsHeaders) {
   if (!user) return jsonResponse({ error: 'Invalid token' }, 401, corsHeaders);
 
   const subscription = await getSubscriptionStatus(user.id, env);
-  if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
-    return jsonResponse({ error: 'No active subscription', redirect: '/signup' }, 403, corsHeaders);
-  }
+  const isActive = subscription && ['trialing', 'active'].includes(subscription.subscription_status);
 
-  return new Response(JSON.stringify({ success: true }), {
+  // Always set the cookie — the dashboard handles billing state, /app enforces its own auth check.
+  // Redirecting inactive users to /signup caused a dead end (existing users can't re-register).
+  return new Response(JSON.stringify({ success: true, active: isActive }), {
     status: 200,
     headers: {
       ...corsHeaders,
