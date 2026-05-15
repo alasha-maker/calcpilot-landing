@@ -54,6 +54,18 @@ export default function Dashboard() {
         });
       } catch (_) {}
 
+      // Refresh the session cookie every time dashboard loads.
+      // The cookie has a finite Max-Age — refreshing here means LAUNCH APP
+      // will always have a valid cookie immediately after viewing the dashboard.
+      try {
+        await fetch("https://calcpilot.cc/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ token: session.access_token }),
+        });
+      } catch (_) {}
+
       const { data } = await supabase
         .from("users")
         .select("subscription_status, trial_end, subscription_end, stripe_customer_id")

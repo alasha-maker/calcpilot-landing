@@ -111,7 +111,7 @@ async function handleSessionExchange(request, env, corsHeaders) {
     headers: {
       ...corsHeaders,
       'Content-Type': 'application/json',
-      'Set-Cookie': `calcpilot_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`,
+      'Set-Cookie': `calcpilot_session=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400`,
     }
   });
 }
