@@ -83,12 +83,28 @@ export default function Dashboard() {
     window.location.href = "/";
   };
 
-  const handleLaunchApp = () => {
-    // Double-check expiry client-side before even attempting /app
+  const handleLaunchApp = async () => {
+    // Client-side expiry guard — no redirect needed, just scroll to upgrade
     if (trialExpiredByDate || !canLaunch) {
       document.getElementById('upgrade-section')?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
+
+    // Always get the freshest possible token from Supabase (client auto-refreshes
+    // if the stored JWT is near-expiry) and immediately stamp a new session cookie.
+    // This fixes cases where the background refresh on page load failed silently.
+    try {
+      const { data: { session: freshSession } } = await supabase.auth.getSession();
+      if (freshSession?.access_token) {
+        await fetch("https://calcpilot.cc/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ token: freshSession.access_token }),
+        });
+      }
+    } catch (_) {}
+
     window.location.href = `/app?s=${Date.now()}`;
   };
 
