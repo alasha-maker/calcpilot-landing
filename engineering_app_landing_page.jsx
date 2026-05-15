@@ -48,6 +48,11 @@ export default function CalcPilotLandingPage() {
     });
   }, []);
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setLoggedInEmail(null);
+  };
+
   return (
     <div style={{ background: '#06080b', color: '#e6e7e9', fontFamily: '"Inter Tight", system-ui, sans-serif', WebkitFontSmoothing: 'antialiased', minHeight: '100vh' }}>
 
@@ -90,6 +95,11 @@ export default function CalcPilotLandingPage() {
             {loggedInEmail ? (
               <>
                 <span className="mono text-zinc-500 hidden sm:block" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>{loggedInEmail}</span>
+                <button onClick={handleSignOut}
+                  className="mono text-zinc-400 hover:text-white transition-colors"
+                  style={{ fontSize: '11px', letterSpacing: '0.1em', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  SIGN OUT
+                </button>
                 <Link to="/dashboard"><button className="btn-primary">DASHBOARD →</button></Link>
               </>
             ) : (
