@@ -874,6 +874,7 @@ async function updateSubscriptionFromLS(attrs, env) {
     stripe_customer_id:  customerId,        // reusing column for LS customer ID
     trial_end:           attrs.trial_ends_at || null,
     subscription_end:    attrs.renews_at || null,
+    portal_url:          attrs.urls?.customer_portal || null,
   }, env);
 }
 

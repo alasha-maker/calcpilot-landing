@@ -68,7 +68,7 @@ export default function Dashboard() {
 
       const { data } = await supabase
         .from("users")
-        .select("subscription_status, trial_end, subscription_end, stripe_customer_id")
+        .select("subscription_status, trial_end, subscription_end, stripe_customer_id, portal_url")
         .eq("id", session.user.id)
         .single();
 
@@ -418,13 +418,15 @@ export default function Dashboard() {
           <div className="surface p-6">
             <div className="mono text-emerald-400 mb-1" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>MANAGE SUBSCRIPTION</div>
             <p className="text-zinc-400 mb-4" style={{ fontSize: '13px', lineHeight: '1.6' }}>
-              To cancel, upgrade, or update your payment method, visit your billing portal or contact support.
+              Cancel, upgrade, or update your payment method directly in your billing portal — no login required.
             </p>
             <div className="flex flex-wrap gap-3">
-              <a href="https://app.lemonsqueezy.com/billing" target="_blank" rel="noopener noreferrer"
+              <a
+                href={subscription?.portal_url || 'https://app.lemonsqueezy.com/my-orders'}
+                target="_blank" rel="noopener noreferrer"
                 className="mono transition-colors"
                 style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none', color: '#7ed3f7', border: '1px solid rgba(126,211,247,0.25)', padding: '8px 16px', display: 'inline-block' }}>
-                BILLING PORTAL →
+                MANAGE BILLING →
               </a>
               <a href="mailto:support@calcpilot.cc"
                 className="mono text-zinc-400 hover:text-white transition-colors"
