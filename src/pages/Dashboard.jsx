@@ -72,6 +72,11 @@ export default function Dashboard() {
   };
 
   const handleLaunchApp = () => {
+    // Double-check expiry client-side before even attempting /app
+    if (trialExpiredByDate || !canLaunch) {
+      document.getElementById('upgrade-section')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
     window.location.href = `/app?s=${Date.now()}`;
   };
 
@@ -115,8 +120,15 @@ export default function Dashboard() {
   const isActive    = isTrialing || status === "active";
   const hasBilling  = !!subscription?.stripe_customer_id;
   const trialDays   = daysLeft(subscription?.trial_end);
-  const needsUpgrade = isTrialing && !hasBilling;   // trial, no card yet
-  const needsReactivate = !isActive;                 // expired / canceled / inactive
+
+  // Client-side date check — DB may still say "trialing" even after trial_end has passed
+  const trialExpiredByDate = isTrialing && subscription?.trial_end
+    && new Date(subscription.trial_end) < new Date();
+
+  // canLaunch = subscription is active AND (if trialing) trial hasn't expired yet
+  const canLaunch       = isActive && !trialExpiredByDate;
+  const needsUpgrade    = isTrialing && !hasBilling && !trialExpiredByDate; // on trial, no card, not yet expired
+  const needsReactivate = !isActive || trialExpiredByDate;                  // expired or canceled
 
   // Urgency colour for trial countdown
   const trialColour = trialDays === null ? '#94a3b8'
@@ -185,8 +197,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Trial Banner (if on trial, no billing) ── */}
-        {needsUpgrade && trialDays !== null && (
+        {/* ── Trial Banner — only when trial is actively running (>0 days left) ── */}
+        {needsUpgrade && trialDays !== null && trialDays > 0 && (
           <div className="px-5 py-4 flex items-center justify-between gap-4"
                style={{ background: 'rgba(251,191,36,0.06)', border: `1px solid ${trialColour}40` }}>
             <div className="flex items-center gap-3">
@@ -211,16 +223,34 @@ export default function Dashboard() {
 
         {/* ── App Access Card ── */}
         <div className="surface-deep p-8 text-center"
-             style={{ border: isActive ? '1px solid #1a3a2a' : '1px solid #3a1a1a' }}>
+             style={{ border: canLaunch ? '1px solid #1a3a2a' : '1px solid #3a1a1a' }}>
           <div className="mono text-zinc-500 mb-2" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>SLD & VOLTAGE DROP MANAGER</div>
           <h2 className="text-white font-bold mb-1" style={{ fontSize: '22px' }}>Professional Electrical Calculations</h2>
           <p className="text-zinc-400 mb-6" style={{ fontSize: '13px' }}>Kahramaa T10/T11 · IEC 60364 · Fault current · Cable optimisation</p>
 
-          {isActive ? (
+          {canLaunch ? (
+            /* Active trial or paid subscriber — go to app */
             <button onClick={handleLaunchApp} className="btn-primary" style={{ minWidth: '200px' }}>
               LAUNCH APP →
             </button>
+          ) : trialExpiredByDate ? (
+            /* Trial expired by date — show inline message, no redirect */
+            <div>
+              <div className="mono text-red-400 mb-3" style={{ fontSize: '13px', letterSpacing: '0.05em' }}>
+                🔒 Your free trial has ended
+              </div>
+              <div className="text-zinc-500 mb-5" style={{ fontSize: '13px' }}>
+                Add a payment method below to restore access instantly.
+              </div>
+              <button
+                onClick={() => document.getElementById('upgrade-section')?.scrollIntoView({ behavior: 'smooth' })}
+                className="btn-primary"
+                style={{ minWidth: '200px' }}>
+                ADD PAYMENT METHOD →
+              </button>
+            </div>
           ) : (
+            /* No subscription at all */
             <div>
               <div className="mono text-red-400 mb-4" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
                 ⚠ SUBSCRIPTION REQUIRED — ADD BILLING BELOW TO RESTORE ACCESS
@@ -239,12 +269,14 @@ export default function Dashboard() {
               <span className="mono font-bold" style={{
                 fontSize: '11px', letterSpacing: '0.1em',
                 color: status === 'active' ? '#4ade80'
+                  : trialExpiredByDate ? '#f87171'
                   : isTrialing ? '#7ed3f7'
                   : status === 'canceled' ? '#f87171'
                   : status === 'past_due' ? '#fb923c'
                   : '#f87171'
               }}>
-                {isTrialing ? 'FREE TRIAL'
+                {trialExpiredByDate ? 'TRIAL EXPIRED'
+                  : isTrialing ? 'FREE TRIAL'
                   : status === 'active' ? 'ACTIVE'
                   : status === 'canceled' ? 'CANCELED'
                   : status === 'past_due' ? 'PAYMENT DUE'
