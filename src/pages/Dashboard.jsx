@@ -8,10 +8,11 @@ const supabase = createClient(
   "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp"
 );
 
+// LemonSqueezy variant slugs (UUID format — used in checkout URLs)
 const STORE = "calcpilot";
 const VARIANTS = {
-  monthly: "1658160",
-  annual:  "1658137",
+  monthly: "93d2c450-10b6-4fff-b8f5-4a94dd473291",
+  annual:  "404236b2-e1db-4af8-b365-6f60c20f1c66",
 };
 
 function loadLemonSqueezy() {
