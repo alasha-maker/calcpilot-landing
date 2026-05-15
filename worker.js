@@ -76,8 +76,8 @@ export default {
       return handleRegister(request, env, corsHeaders);
     }
 
-    if (path === '/webhook/paddle' && request.method === 'POST') {
-      return handlePaddleWebhook(request, env);
+    if (path === '/webhook/lemonsqueezy' && request.method === 'POST') {
+      return handleLemonSqueezyWebhook(request, env);
     }
 
     // ── Static Assets (SPA) ─────────────────────────────────
@@ -721,30 +721,29 @@ async function handleRegister(request, env, corsHeaders) {
   return jsonResponse({ ok: true }, 200, corsHeaders);
 }
 
-// ─── Paddle Webhook ───────────────────────────────────────────────────────────
-async function handlePaddleWebhook(request, env) {
-  const signature = request.headers.get('Paddle-Signature');
+// ─── LemonSqueezy Webhook ─────────────────────────────────────────────────────
+async function handleLemonSqueezyWebhook(request, env) {
+  const signature = request.headers.get('X-Signature');
   if (!signature) return new Response('Unauthorized', { status: 401 });
 
   const body = await request.text();
-  const isValid = await verifyPaddleSignature(body, signature, env.PADDLE_WEBHOOK_SECRET);
+  const isValid = await verifyLemonSqueezySignature(body, signature, env.LEMONSQUEEZY_WEBHOOK_SECRET);
   if (!isValid) return new Response('Invalid signature', { status: 401 });
 
   const event = JSON.parse(body);
+  const eventName = event.meta?.event_name;
+  const attrs = event.data?.attributes;
 
-  switch (event.event_type) {
-    case 'transaction.completed':
-      await linkCustomerToUser(event.data, env);
+  switch (eventName) {
+    case 'subscription_created':
+    case 'subscription_updated':
+      await updateSubscriptionFromLS(attrs, env);
       break;
-    case 'subscription.created':
-    case 'subscription.updated':
-      await updateSubscription(event.data, env);
+    case 'subscription_cancelled':
+      await updateUserByEmail(attrs?.user_email, { subscription_status: 'canceled' }, env);
       break;
-    case 'subscription.canceled':
-      await updateUserField(event.data.customer_id, { subscription_status: 'canceled' }, env);
-      break;
-    case 'subscription.past_due':
-      await updateUserField(event.data.customer_id, { subscription_status: 'past_due' }, env);
+    case 'subscription_payment_failed':
+      await updateUserByEmail(attrs?.user_email, { subscription_status: 'past_due' }, env);
       break;
   }
 
@@ -804,96 +803,6 @@ async function getSubscriptionStatus(userId, env) {
   return user;
 }
 
-async function linkCustomerToUser(data, env) {
-  const email = data.customer?.email;
-  const customerId = data.customer_id;
-  if (!email) return;
-
-  // Step 1: Try to look up the Supabase auth user UUID by email so we can upsert.
-  // The service key grants access to the admin users endpoint.
-  let userId = null;
-  try {
-    const adminRes = await fetch(
-      `${env.SUPABASE_URL}/auth/v1/admin/users?filter=${encodeURIComponent(email)}&page=1&per_page=1`,
-      {
-        headers: {
-          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-          'apikey':         env.SUPABASE_SERVICE_KEY,
-        }
-      }
-    );
-    if (adminRes.ok) {
-      const adminData = await adminRes.json();
-      userId = adminData.users?.[0]?.id ?? null;
-    }
-  } catch (e) {
-    console.warn('[linkCustomerToUser] admin lookup failed:', e?.message);
-  }
-
-  const trialEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-  if (userId) {
-    // UPSERT — creates the row if /api/register was never called, updates if it was.
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/users?on_conflict=id`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-          'apikey':         env.SUPABASE_SERVICE_KEY,
-          'Content-Type':  'application/json',
-          'Prefer':        'resolution=merge-duplicates,return=minimal',
-        },
-        body: JSON.stringify({
-          id:                  userId,
-          email:               email,
-          stripe_customer_id:  customerId,
-          subscription_status: 'trialing',
-          trial_end:           trialEnd,
-        }),
-      }
-    );
-  } else {
-    // Fallback: row should already exist from /api/register — just update the customer ID.
-    await fetch(
-      `${env.SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-          'apikey':         env.SUPABASE_SERVICE_KEY,
-          'Content-Type':  'application/json',
-          'Prefer':        'return=minimal',
-        },
-        body: JSON.stringify({ stripe_customer_id: customerId, subscription_status: 'trialing', trial_end: trialEnd }),
-      }
-    );
-  }
-}
-
-async function updateSubscription(data, env) {
-  await updateUserField(data.customer_id, {
-    subscription_status: data.status,
-    trial_end: data.trial_dates?.ends_at || null,
-    subscription_end: data.current_billing_period?.ends_at || null,
-  }, env);
-}
-
-async function updateUserField(customerId, fields, env) {
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/users?stripe_customer_id=eq.${customerId}`,
-    {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-        'apikey': env.SUPABASE_SERVICE_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal',
-      },
-      body: JSON.stringify(fields)
-    }
-  );
-}
 
 // ─── One-time Trial Fix ───────────────────────────────────────────────────────
 // Extends trial 30 days for the owner account via Supabase service key.
@@ -923,21 +832,56 @@ async function handleFixTrial(env) {
   });
 }
 
-async function verifyPaddleSignature(body, signatureHeader, secret) {
-  const parts = Object.fromEntries(
-    signatureHeader.split(';').map(p => p.split('='))
-  );
-  const { ts, h1 } = parts;
-  if (!ts || !h1) return false;
-
+async function verifyLemonSqueezySignature(body, signature, secret) {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw', encoder.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
-  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(`${ts}:${body}`));
+  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
   const computed = Array.from(new Uint8Array(sig))
     .map(b => b.toString(16).padStart(2, '0')).join('');
+  return computed === signature;
+}
 
-  return computed === h1;
+async function updateSubscriptionFromLS(attrs, env) {
+  if (!attrs) return;
+  const email = attrs.user_email;
+  const customerId = String(attrs.customer_id);
+
+  // Map LemonSqueezy statuses to our internal statuses
+  const statusMap = {
+    active:    'active',
+    trialing:  'trialing',
+    cancelled: 'canceled',
+    paused:    'canceled',
+    past_due:  'past_due',
+    unpaid:    'past_due',
+    expired:   'canceled',
+  };
+  const mappedStatus = statusMap[attrs.status] || attrs.status;
+
+  await updateUserByEmail(email, {
+    subscription_status: mappedStatus,
+    stripe_customer_id:  customerId,        // reusing column for LS customer ID
+    trial_end:           attrs.trial_ends_at || null,
+    subscription_end:    attrs.renews_at || null,
+  }, env);
+}
+
+async function updateUserByEmail(email, fields, env) {
+  if (!email) return;
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/users?email=eq.${encodeURIComponent(email)}`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        'apikey':         env.SUPABASE_SERVICE_KEY,
+        'Content-Type':  'application/json',
+        'Prefer':        'return=minimal',
+      },
+      body: JSON.stringify(fields),
+    }
+  );
 }

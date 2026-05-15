@@ -8,19 +8,20 @@ const supabase = createClient(
   "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp"
 );
 
-const PRICES = {
-  monthly: "pri_01kr62rgnmggyxdtad8hcwqjr9",
-  annual:  "pri_01kr62vzsjmh3a6ft9465zkeeh",
+const STORE = "calcpilot";
+const VARIANTS = {
+  monthly: "1658160",
+  annual:  "1658137",
 };
-const PADDLE_TOKEN = "live_71ff440e1dfa05180a41f2c0b7b";
 
-function loadPaddle() {
+function loadLemonSqueezy() {
   return new Promise((resolve, reject) => {
-    if (window.Paddle) { resolve(window.Paddle); return; }
+    if (window.LemonSqueezy) { resolve(window.LemonSqueezy); return; }
     const script = document.createElement("script");
-    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
-    script.onload = () => { window.Paddle.Initialize({ token: PADDLE_TOKEN }); resolve(window.Paddle); };
-    script.onerror = () => reject(new Error("Failed to load Paddle.js"));
+    script.src = "https://app.lemonsqueezy.com/js/lemon.js";
+    script.defer = true;
+    script.onload = () => { window.createLemonSqueezy(); resolve(window.LemonSqueezy); };
+    script.onerror = () => reject(new Error("Failed to load LemonSqueezy"));
     document.head.appendChild(script);
   });
 }
@@ -76,12 +77,9 @@ export default function Dashboard() {
     setCheckoutError("");
     setCheckoutLoading(true);
     try {
-      const Paddle = await loadPaddle();
-      Paddle.Checkout.open({
-        items: [{ priceId: PRICES[plan], quantity: 1 }],
-        customer: { email: user.email },
-        settings: { successUrl: "https://calcpilot.cc/dashboard" },
-      });
+      const checkoutUrl = `https://${STORE}.lemonsqueezy.com/checkout/buy/${VARIANTS[plan]}?checkout[email]=${encodeURIComponent(user.email)}&checkout[success_url]=https://calcpilot.cc/dashboard`;
+      await loadLemonSqueezy();
+      window.LemonSqueezy.Url.Open(checkoutUrl);
     } catch (err) {
       setCheckoutError("Failed to open checkout. Please try again.");
     }
