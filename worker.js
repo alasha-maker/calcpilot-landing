@@ -400,7 +400,9 @@ async function handleAppAccess(request, env) {
 
     const subscription = await getSubscriptionStatus(user.id, env);
     if (!subscription || !['trialing', 'active'].includes(subscription.subscription_status)) {
-      return Response.redirect('https://calcpilot.cc/signup', 302);
+      // Send expired/inactive users to dashboard so they see the upgrade prompt,
+      // not to /signup where existing accounts get a "User already registered" error.
+      return Response.redirect('https://calcpilot.cc/dashboard?expired=1', 302);
     }
 
     const appFile = await env.APP_BUCKET.get('SLD_VoltDrop_Manager.html');

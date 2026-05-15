@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { createClient } from '@supabase/supabase-js';
 import './landing-new.css';
+
+const supabase = createClient(
+  "https://tmzxuffhdmvfkahxgcfp.supabase.co",
+  "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp"
+);
 
 /* ── Auto-cable demo data ── */
 const AC_INITIAL = [
@@ -32,8 +38,15 @@ function StatusPill({ status }) {
 export default function CalcPilotLandingPage() {
   const [acFixed, setAcFixed] = useState(false);
   const [mode, setMode]       = useState('kahramaa');
+  const [loggedInEmail, setLoggedInEmail] = useState(null);
   const rows = acFixed ? AC_FIXED : AC_INITIAL;
   const m    = MODE_DATA[mode];
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.email) setLoggedInEmail(session.user.email);
+    });
+  }, []);
 
   return (
     <div style={{ background: '#06080b', color: '#e6e7e9', fontFamily: '"Inter Tight", system-ui, sans-serif', WebkitFontSmoothing: 'antialiased', minHeight: '100vh' }}>
@@ -74,8 +87,17 @@ export default function CalcPilotLandingPage() {
             <a href="#faq"       className="nav-link hover:text-white">FAQ</a>
           </div>
           <div className="flex items-center gap-5">
-            <Link to="/login" className="mono text-zinc-400 hover:text-white" style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none' }}>LOG IN</Link>
-            <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
+            {loggedInEmail ? (
+              <>
+                <span className="mono text-zinc-500 hidden sm:block" style={{ fontSize: '10px', letterSpacing: '0.08em' }}>{loggedInEmail}</span>
+                <Link to="/dashboard"><button className="btn-primary">DASHBOARD →</button></Link>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="mono text-zinc-400 hover:text-white" style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none' }}>LOG IN</Link>
+                <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
+              </>
+            )}
           </div>
         </nav>
       </header>
@@ -99,11 +121,15 @@ export default function CalcPilotLandingPage() {
               CalcPilot replaces the Excel + AutoCAD + manual VD-table loop with one calculation engine. Build the full <span className="mono text-cyan-300">MDB → SMDB → DB → final&nbsp;load</span> tree, run T10 / T11 in real time, export a layered DXF single-line diagram ready for submission.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-6">
-              <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
+              {loggedInEmail ? (
+                <Link to="/dashboard"><button className="btn-primary">GO TO DASHBOARD →</button></Link>
+              ) : (
+                <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
+              )}
               <a href="#preview" className="btn-link">WATCH 90-SEC WALKTHROUGH ↗</a>
             </div>
             <div className="mt-6 mono text-zinc-500" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
-              NO CREDIT CARD · SAMPLE PROJECT PRE-LOADED · CANCEL ANYTIME
+              {loggedInEmail ? `SIGNED IN AS ${loggedInEmail.toUpperCase()}` : 'NO CREDIT CARD · SAMPLE PROJECT PRE-LOADED · CANCEL ANYTIME'}
             </div>
 
             {/* live KPI strip */}
@@ -495,7 +521,7 @@ export default function CalcPilotLandingPage() {
                 <li className="flex gap-3"><span className="text-zinc-700 mono mt-0.5">×</span><span className="text-zinc-500">DXF import / SLD export</span></li>
                 <li className="flex gap-3"><span className="text-zinc-700 mono mt-0.5">×</span><span className="text-zinc-500">Cost estimation module</span></li>
               </ul>
-              <Link to="/signup" className="mt-8 block"><button className="btn-ghost w-full">START FREE TRIAL</button></Link>
+              <Link to={loggedInEmail ? "/dashboard" : "/signup"} className="mt-8 block"><button className="btn-ghost w-full">{loggedInEmail ? "GO TO DASHBOARD" : "START FREE TRIAL"}</button></Link>
             </div>
             {/* Standard Monthly */}
             <div className="relative plan-card border p-8 flex flex-col" style={{ borderColor: '#7ed3f7', background: 'linear-gradient(180deg, rgba(126,211,247,0.04), transparent 60%), #0a0d12' }}>
@@ -516,7 +542,7 @@ export default function CalcPilotLandingPage() {
                 <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>PDF &amp; Excel report export</li>
                 <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Cost estimation module</li>
               </ul>
-              <Link to="/signup" className="mt-8 block"><button className="btn-primary w-full">START FREE TRIAL →</button></Link>
+              <Link to={loggedInEmail ? "/dashboard" : "/signup"} className="mt-8 block"><button className="btn-primary w-full">{loggedInEmail ? "GO TO DASHBOARD →" : "START FREE TRIAL →"}</button></Link>
             </div>
             {/* Standard Annual */}
             <div className="plan-card border rule p-8 surface flex flex-col">
@@ -534,7 +560,7 @@ export default function CalcPilotLandingPage() {
                 <li className="flex gap-3"><span className="text-cyan-300 mono mt-0.5">✓</span>Priority support</li>
                 <li className="flex gap-3"><span className="text-emerald-400 mono mt-0.5">↓</span><span className="text-emerald-400">~$4.17 / mo effective rate</span></li>
               </ul>
-              <Link to="/signup" className="mt-8 block"><button className="btn-ghost w-full">START FREE TRIAL →</button></Link>
+              <Link to={loggedInEmail ? "/dashboard" : "/signup"} className="mt-8 block"><button className="btn-ghost w-full">{loggedInEmail ? "GO TO DASHBOARD →" : "START FREE TRIAL →"}</button></Link>
             </div>
           </div>
           <div className="mt-8 mono text-zinc-500 flex flex-wrap gap-6 justify-center" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
@@ -589,7 +615,11 @@ export default function CalcPilotLandingPage() {
                   Load schedule, voltage drop, Auto Cable, layered SLD, Kahramaa-ready report — one platform, one workflow, one submission.
                 </p>
                 <div className="mt-9 flex flex-wrap gap-5 items-center">
-                  <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
+                  {loggedInEmail ? (
+                    <Link to="/dashboard"><button className="btn-primary">GO TO DASHBOARD →</button></Link>
+                  ) : (
+                    <Link to="/signup"><button className="btn-primary">START FREE TRIAL →</button></Link>
+                  )}
                   <a href="mailto:info@calcpilot.com" className="btn-link">BOOK 20-MIN DEMO ↗</a>
                 </div>
               </div>

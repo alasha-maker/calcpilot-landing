@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 import "../../landing-new.css";
 
@@ -27,6 +27,9 @@ function loadLemonSqueezy() {
 }
 
 export default function Dashboard() {
+  const [searchParams] = useSearchParams();
+  const cameFromExpired = searchParams.get("expired") === "1";
+
   const [user, setUser]           = useState(null);
   const [subscription, setSubscription] = useState(null);
   const [loading, setLoading]     = useState(true);
@@ -157,6 +160,30 @@ export default function Dashboard() {
           <div className="eyebrow mb-3"><span className="num">[01]</span>Dashboard</div>
           <h1 className="display text-white" style={{ fontSize: '40px' }}>Welcome back.</h1>
         </div>
+
+        {/* ── Trial Expired Alert — shown when user tried to launch the app ── */}
+        {(cameFromExpired || needsReactivate) && (
+          <div className="px-5 py-5 flex items-start gap-4"
+               style={{ background: 'rgba(248,81,73,0.07)', border: '1px solid rgba(248,81,73,0.35)' }}>
+            <span style={{ fontSize: '22px', lineHeight: 1 }}>🔒</span>
+            <div className="flex-1">
+              <div className="font-semibold text-red-400" style={{ fontSize: '15px' }}>
+                {cameFromExpired ? 'Your free trial has ended' : 'Subscription inactive'}
+              </div>
+              <div className="text-zinc-400 mt-1" style={{ fontSize: '13px', lineHeight: '1.55' }}>
+                {cameFromExpired
+                  ? 'Access to the app requires an active subscription. Choose a plan below to continue — setup takes under 2 minutes.'
+                  : 'Your subscription is no longer active. Reactivate below to restore full access.'}
+              </div>
+              <button
+                onClick={() => document.getElementById('upgrade-section')?.scrollIntoView({ behavior: 'smooth' })}
+                className="mono mt-3 inline-block"
+                style={{ fontSize: '10px', letterSpacing: '0.12em', color: '#f87171', background: 'none', border: '1px solid rgba(248,81,73,0.4)', padding: '6px 14px', cursor: 'pointer' }}>
+                VIEW PLANS ↓
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Trial Banner (if on trial, no billing) ── */}
         {needsUpgrade && trialDays !== null && (
