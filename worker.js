@@ -617,8 +617,8 @@ function buildBootstrap(encB64, ivB64, userEmail) {
 
     // DevTools size detection — blur iframe if DevTools open
     setInterval(function(){
-      const w = window.outerWidth  - window.innerWidth  > 160;
-      const h = window.outerHeight - window.innerHeight > 160;
+      const w = window.outerWidth  - window.innerWidth  > 400;
+      const h = window.outerHeight - window.innerHeight > 400;
       const frame = document.getElementById('app-frame');
       if(frame){
         frame.style.filter        = (w||h) ? 'blur(12px) brightness(0.1)' : '';
