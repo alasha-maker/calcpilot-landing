@@ -793,11 +793,15 @@ async function getSubscriptionStatus(userId, env) {
   const user = data[0];
   if (!user) return null;
 
-  // If still marked trialing, verify the trial period hasn't actually ended
-  if (user.subscription_status === 'trialing' && user.trial_end) {
+  // If still marked trialing (or on_trial from LS), verify the trial period hasn't ended
+  if (['trialing', 'on_trial'].includes(user.subscription_status) && user.trial_end) {
     if (new Date(user.trial_end) < new Date()) {
       return { ...user, subscription_status: 'expired' };
     }
+  }
+  // Normalise legacy "on_trial" rows so all downstream checks see "trialing"
+  if (user.subscription_status === 'on_trial') {
+    return { ...user, subscription_status: 'trialing' };
   }
 
   return user;
@@ -850,9 +854,11 @@ async function updateSubscriptionFromLS(attrs, env) {
   const customerId = String(attrs.customer_id);
 
   // Map LemonSqueezy statuses to our internal statuses
+  // NOTE: LemonSqueezy sends "on_trial" (not "trialing") for trial subscriptions
   const statusMap = {
+    on_trial:  'trialing',   // LemonSqueezy's actual trial status string
     active:    'active',
-    trialing:  'trialing',
+    trialing:  'trialing',   // keep as fallback
     cancelled: 'canceled',
     paused:    'canceled',
     past_due:  'past_due',

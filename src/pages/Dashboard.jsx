@@ -110,7 +110,7 @@ export default function Dashboard() {
   }
 
   const status = subscription?.subscription_status;
-  const isActive = status === "trialing" || status === "active";
+  const isActive = status === "trialing" || status === "on_trial" || status === "active";
   const hasBilling = !!subscription?.stripe_customer_id;
   const trialDays = daysLeft(subscription?.trial_end);
 
@@ -179,11 +179,11 @@ export default function Dashboard() {
                 fontSize: '11px', letterSpacing: '0.1em',
                 color: status === 'active' ? '#4ade80' : status === 'trialing' ? '#7ed3f7' : '#f87171'
               }}>
-                {status === 'trialing' ? 'FREE TRIAL' : status === 'active' ? 'ACTIVE' : status === 'canceled' ? 'CANCELED' : status === 'past_due' ? 'PAYMENT DUE' : 'INACTIVE'}
+                {(status === 'trialing' || status === 'on_trial') ? 'FREE TRIAL' : status === 'active' ? 'ACTIVE' : status === 'canceled' ? 'CANCELED' : status === 'past_due' ? 'PAYMENT DUE' : 'INACTIVE'}
               </span>
             </div>
 
-            {status === 'trialing' && subscription?.trial_end && (
+            {(status === 'trialing' || status === 'on_trial') && subscription?.trial_end && (
               <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #1a1f27' }}>
                 <span className="text-zinc-400" style={{ fontSize: '14px' }}>Trial ends</span>
                 <span className="mono text-zinc-300" style={{ fontSize: '12px' }}>
