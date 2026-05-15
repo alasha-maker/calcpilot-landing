@@ -8,87 +8,56 @@ const supabase = createClient(
   "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp"
 );
 
-// LemonSqueezy variant slugs (UUID format — used in checkout URLs)
-const STORE = "calcpilot";
-const VARIANTS = {
-  monthly: "93d2c450-10b6-4fff-b8f5-4a94dd473291",
-  annual:  "404236b2-e1db-4af8-b365-6f60c20f1c66",
-};
-
-function loadLemonSqueezy() {
-  return new Promise((resolve, reject) => {
-    if (window.LemonSqueezy) { resolve(window.LemonSqueezy); return; }
-    const script = document.createElement("script");
-    script.src = "https://app.lemonsqueezy.com/js/lemon.js";
-    script.defer = true;
-    script.onload = () => { window.createLemonSqueezy(); resolve(window.LemonSqueezy); };
-    script.onerror = () => reject(new Error("Failed to load LemonSqueezy"));
-    document.head.appendChild(script);
-  });
-}
-
 export default function Signup() {
   const [email, setEmail]                   = useState("");
   const [password, setPassword]             = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [plan, setPlan]                     = useState("monthly");
   const [error, setError]                   = useState("");
   const [loading, setLoading]               = useState(false);
 
   const handleSignup = async (e) => {
     e.preventDefault();
     setError("");
+
     if (password !== confirmPassword) { setError("Passwords do not match."); return; }
     if (password.length < 8)          { setError("Password must be at least 8 characters."); return; }
     setLoading(true);
 
-    // Step 1 — Create Supabase auth user
+    // Step 1 — Create Supabase auth account
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
     if (signUpError) { setError(signUpError.message); setLoading(false); return; }
 
     const token = signUpData?.session?.access_token;
 
-    if (token) {
-      // Step 2 — Create the public.users row (trialing) so the webhook can find it
-      try {
-        await fetch("https://calcpilot.cc/api/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ token }),
-        });
-      } catch (err) {
-        console.warn("Register call failed (non-fatal):", err);
-      }
-
-      // Step 3 — Set the calcpilot_session cookie so /app works after checkout
-      try {
-        await fetch("https://calcpilot.cc/auth/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ token }),
-        });
-      } catch (err) {
-        console.warn("Session setup failed (non-fatal):", err);
-      }
-    } else {
-      // Email confirmation is enabled in Supabase — user must verify before paying.
-      // Direct them to check their inbox instead of opening checkout.
-      setError("Account created! Check your inbox to confirm your email, then log in to start your free trial.");
+    if (!token) {
+      // Email confirmation is on — guide the user
+      setError("Account created! Please check your email to confirm, then sign in.");
       setLoading(false);
       return;
     }
 
-    // Step 4 — Open LemonSqueezy checkout
+    // Step 2 — Create public.users row with 30-day trial
     try {
-      const checkoutUrl = `https://${STORE}.lemonsqueezy.com/checkout/buy/${VARIANTS[plan]}?checkout[email]=${encodeURIComponent(email)}&checkout[success_url]=https://calcpilot.cc/dashboard`;
-      await loadLemonSqueezy();
-      window.LemonSqueezy.Url.Open(checkoutUrl);
-    } catch (err) {
-      setError("Failed to open checkout. Please try again.");
-    }
-    setLoading(false);
+      await fetch("https://calcpilot.cc/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token }),
+      });
+    } catch (_) {}
+
+    // Step 3 — Set session cookie
+    try {
+      await fetch("https://calcpilot.cc/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token }),
+      });
+    } catch (_) {}
+
+    // Step 4 — Go to dashboard (trial is active, no card needed yet)
+    window.location.href = "/dashboard";
   };
 
   return (
@@ -125,55 +94,22 @@ export default function Signup() {
               Start your<br /><em className="text-cyan-300">free trial.</em>
             </h1>
             <p className="mt-4 text-zinc-400" style={{ fontSize: '14px', lineHeight: '1.65' }}>
-              1 month free — no credit card required. Full access to all features.
+              1 month free — no credit card required. Full access to all features from day one.
             </p>
           </div>
 
-          {/* Plan Selector */}
-          <div className="mb-2">
-            <div className="mono text-zinc-500 mb-3" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>SELECT PLAN</div>
-            <div className="grid grid-cols-2 gap-3">
-              {/* Monthly */}
-              <button type="button" onClick={() => setPlan("monthly")}
-                className="p-5 text-left transition-all plan-card"
-                style={{
-                  background: plan === 'monthly' ? 'linear-gradient(180deg, rgba(126,211,247,0.06), transparent), #0a0d12' : '#0a0d12',
-                  border: plan === 'monthly' ? '1px solid #7ed3f7' : '1px solid #1a1f27',
-                }}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="mono text-zinc-400" style={{ fontSize: '10px', letterSpacing: '0.15em' }}>STANDARD</div>
-                  <span className="pill pill-info">MONTHLY</span>
-                </div>
-                <div className="display text-white" style={{ fontSize: '36px' }}>$12<span className="text-zinc-500" style={{ fontSize: '14px' }}>/mo</span></div>
-                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>BILLED MONTHLY</div>
-              </button>
-
-              {/* Annual */}
-              <button type="button" onClick={() => setPlan("annual")}
-                className="p-5 text-left transition-all plan-card relative"
-                style={{
-                  background: plan === 'annual' ? 'linear-gradient(180deg, rgba(126,211,247,0.06), transparent), #0a0d12' : '#0a0d12',
-                  border: plan === 'annual' ? '1px solid #7ed3f7' : '1px solid #1a1f27',
-                }}>
-                <div className="absolute -top-3 right-4 mono font-bold bg-emerald-400 text-slate-950 px-2 py-0.5" style={{ fontSize: '9px', letterSpacing: '0.12em' }}>SAVE 65%</div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="mono text-zinc-400" style={{ fontSize: '10px', letterSpacing: '0.15em' }}>STANDARD</div>
-                  <span className="pill pill-pass">ANNUAL</span>
-                </div>
-                <div className="display text-white" style={{ fontSize: '36px' }}>$50<span className="text-zinc-500" style={{ fontSize: '14px' }}>/yr</span></div>
-                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>~$4.17 / MO EFFECTIVE</div>
-              </button>
-            </div>
-
-            {/* Trial note */}
-            <div className="mt-3 flex items-center gap-2 mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-              1 MONTH FREE TRIAL · NO CHARGE TODAY · CANCEL ANYTIME
-            </div>
+          {/* Trust badges */}
+          <div className="flex flex-wrap gap-4 mb-8">
+            {['30-DAY FREE TRIAL', 'NO CARD REQUIRED', 'CANCEL ANYTIME'].map(label => (
+              <div key={label} className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
+                <span className="mono text-zinc-500" style={{ fontSize: '10px', letterSpacing: '0.12em' }}>{label}</span>
+              </div>
+            ))}
           </div>
 
           {/* Divider */}
-          <div className="tech-line my-8"></div>
+          <div className="tech-line mb-8"></div>
 
           {/* Form */}
           <form onSubmit={handleSignup} className="space-y-4">
@@ -220,17 +156,23 @@ export default function Signup() {
             </div>
 
             {error && (
-              <div className="mono px-4 py-3" style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.3)', color: '#ff8a8a', fontSize: '12px', letterSpacing: '0.05em' }}>
-                ⚠ {error}
+              <div className="mono px-4 py-3" style={{
+                background: error.startsWith("Account created") ? 'rgba(52,211,153,0.08)' : 'rgba(248,81,73,0.08)',
+                border: error.startsWith("Account created") ? '1px solid rgba(52,211,153,0.3)' : '1px solid rgba(248,81,73,0.3)',
+                color: error.startsWith("Account created") ? '#6ee7b7' : '#ff8a8a',
+                fontSize: '12px', letterSpacing: '0.05em'
+              }}>
+                {error.startsWith("Account created") ? '✓' : '⚠'} {error}
               </div>
             )}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full mt-2" style={{ opacity: loading ? 0.6 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
-              {loading ? "CREATING ACCOUNT..." : "START FREE TRIAL →"}
+            <button type="submit" disabled={loading} className="btn-primary w-full mt-2"
+              style={{ opacity: loading ? 0.6 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+              {loading ? "CREATING ACCOUNT..." : "CREATE ACCOUNT →"}
             </button>
           </form>
 
-          {/* Footer links */}
+          {/* Footer */}
           <div className="mt-6 text-center mono text-zinc-500" style={{ fontSize: '11px', letterSpacing: '0.08em' }}>
             By signing up you agree to our{' '}
             <Link to="/terms" className="text-zinc-400 hover:text-cyan-300">Terms of Service</Link>.

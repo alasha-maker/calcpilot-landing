@@ -19,19 +19,18 @@ export default function Login() {
     setLoading(true);
     setError("");
 
+    // Step 1 — Authenticate with Supabase
     const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (signInError) {
-      setError(signInError.message);
+      setError("Invalid email or password. Please try again.");
       setLoading(false);
       return;
     }
 
     const token = data.session.access_token;
 
-    // Ensure the public.users row exists — safe no-op if it already does.
-    // Handles the case where email confirmation was enabled and the user never
-    // went through the Signup page's /api/register call.
+    // Step 2 — Ensure public.users row exists (safe no-op if already there)
     try {
       await fetch("https://calcpilot.cc/api/register", {
         method: "POST",
@@ -39,33 +38,20 @@ export default function Login() {
         credentials: "include",
         body: JSON.stringify({ token }),
       });
-    } catch (err) {
-      console.warn("Register call failed (non-fatal):", err);
-    }
+    } catch (_) {}
 
-    // Exchange token for a secure session cookie
+    // Step 3 — Set the secure session cookie
     try {
-      const res = await fetch("https://calcpilot.cc/auth/session", {
+      await fetch("https://calcpilot.cc/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ token }),
       });
+    } catch (_) {}
 
-      const result = await res.json();
-
-      if (res.ok) {
-        window.location.href = "/dashboard";
-      } else if (result.redirect) {
-        window.location.href = result.redirect;
-      } else {
-        setError(result.error || "Login failed. Please try again.");
-        setLoading(false);
-      }
-    } catch (err) {
-      setError("Connection error. Please try again.");
-      setLoading(false);
-    }
+    // Step 4 — Always go to dashboard (dashboard handles all subscription states)
+    window.location.href = "/dashboard";
   };
 
   return (
@@ -151,7 +137,7 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Footer links */}
+          {/* Footer */}
           <div className="mt-6 text-center" style={{ fontSize: '14px' }}>
             <span className="text-zinc-500">Don't have an account? </span>
             <Link to="/signup" className="text-cyan-300 hover:text-cyan-200 font-medium">Start free trial</Link>

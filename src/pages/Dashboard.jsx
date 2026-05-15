@@ -8,7 +8,6 @@ const supabase = createClient(
   "sb_publishable_nHuUFXZtEu7VAQOogIICVw_0hbtCwIp"
 );
 
-// LemonSqueezy variant slugs (UUID format — used in checkout URLs)
 const STORE = "calcpilot";
 const VARIANTS = {
   monthly: "93d2c450-10b6-4fff-b8f5-4a94dd473291",
@@ -28,15 +27,15 @@ function loadLemonSqueezy() {
 }
 
 export default function Dashboard() {
-  const [user, setUser]               = useState(null);
+  const [user, setUser]           = useState(null);
   const [subscription, setSubscription] = useState(null);
-  const [loading, setLoading]         = useState(true);
-  const [plan, setPlan]               = useState("monthly");
+  const [loading, setLoading]     = useState(true);
+  const [plan, setPlan]           = useState("monthly");
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError]     = useState("");
 
   useEffect(() => {
-    const loadUser = async () => {
+    const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { window.location.href = "/login"; return; }
 
@@ -61,8 +60,7 @@ export default function Dashboard() {
       setSubscription(data);
       setLoading(false);
     };
-
-    loadUser();
+    init();
   }, []);
 
   const handleLogout = async () => {
@@ -81,7 +79,7 @@ export default function Dashboard() {
       const checkoutUrl = `https://${STORE}.lemonsqueezy.com/checkout/buy/${VARIANTS[plan]}?checkout[email]=${encodeURIComponent(user.email)}&checkout[success_url]=https://calcpilot.cc/dashboard`;
       await loadLemonSqueezy();
       window.LemonSqueezy.Url.Open(checkoutUrl);
-    } catch (err) {
+    } catch {
       setCheckoutError("Failed to open checkout. Please try again.");
     }
     setCheckoutLoading(false);
@@ -104,15 +102,25 @@ export default function Dashboard() {
     return (
       <div style={{ background: '#06080b', minHeight: '100vh', fontFamily: '"Inter Tight", system-ui, sans-serif' }}
            className="flex items-center justify-center">
-        <div className="mono text-zinc-500" style={{ fontSize: '11px', letterSpacing: '0.15em' }}>LOADING DASHBOARD...</div>
+        <div className="mono text-zinc-500" style={{ fontSize: '11px', letterSpacing: '0.15em' }}>LOADING...</div>
       </div>
     );
   }
 
-  const status = subscription?.subscription_status;
-  const isActive = status === "trialing" || status === "on_trial" || status === "active";
-  const hasBilling = !!subscription?.stripe_customer_id;
-  const trialDays = daysLeft(subscription?.trial_end);
+  const status      = subscription?.subscription_status;
+  const isTrialing  = status === "trialing" || status === "on_trial";
+  const isActive    = isTrialing || status === "active";
+  const hasBilling  = !!subscription?.stripe_customer_id;
+  const trialDays   = daysLeft(subscription?.trial_end);
+  const needsUpgrade = isTrialing && !hasBilling;   // trial, no card yet
+  const needsReactivate = !isActive;                 // expired / canceled / inactive
+
+  // Urgency colour for trial countdown
+  const trialColour = trialDays === null ? '#94a3b8'
+    : trialDays <= 3  ? '#f87171'
+    : trialDays <= 7  ? '#fb923c'
+    : trialDays <= 14 ? '#fbbf24'
+    : '#4ade80';
 
   return (
     <div style={{ background: '#06080b', minHeight: '100vh', fontFamily: '"Inter Tight", system-ui, sans-serif', color: '#e6e7e9' }}
@@ -144,14 +152,39 @@ export default function Dashboard() {
 
       <main className="wrap py-12 space-y-6" style={{ maxWidth: '720px' }}>
 
-        {/* Welcome */}
-        <div className="mb-8">
+        {/* ── Welcome ── */}
+        <div className="mb-2">
           <div className="eyebrow mb-3"><span className="num">[01]</span>Dashboard</div>
           <h1 className="display text-white" style={{ fontSize: '40px' }}>Welcome back.</h1>
         </div>
 
-        {/* ── Launch App Card ── */}
-        <div className="surface-deep p-8 text-center" style={{ border: isActive ? '1px solid #1a3a2a' : '1px solid #1a1f27' }}>
+        {/* ── Trial Banner (if on trial, no billing) ── */}
+        {needsUpgrade && trialDays !== null && (
+          <div className="px-5 py-4 flex items-center justify-between gap-4"
+               style={{ background: 'rgba(251,191,36,0.06)', border: `1px solid ${trialColour}40` }}>
+            <div className="flex items-center gap-3">
+              <span style={{ fontSize: '18px' }}>{trialDays <= 7 ? '⚠' : '⏱'}</span>
+              <div>
+                <div className="font-semibold text-white" style={{ fontSize: '14px' }}>
+                  Free trial — <span style={{ color: trialColour }}>{trialDays} day{trialDays !== 1 ? 's' : ''} remaining</span>
+                </div>
+                <div className="text-zinc-500" style={{ fontSize: '12px', marginTop: '2px' }}>
+                  Add a payment method below to keep access after your trial ends.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => document.getElementById('upgrade-section')?.scrollIntoView({ behavior: 'smooth' })}
+              className="mono text-white flex-shrink-0 px-4 py-2 transition-colors"
+              style={{ background: trialColour, fontSize: '10px', letterSpacing: '0.12em', border: 'none', cursor: 'pointer' }}>
+              UPGRADE →
+            </button>
+          </div>
+        )}
+
+        {/* ── App Access Card ── */}
+        <div className="surface-deep p-8 text-center"
+             style={{ border: isActive ? '1px solid #1a3a2a' : '1px solid #3a1a1a' }}>
           <div className="mono text-zinc-500 mb-2" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>SLD & VOLTAGE DROP MANAGER</div>
           <h2 className="text-white font-bold mb-1" style={{ fontSize: '22px' }}>Professional Electrical Calculations</h2>
           <p className="text-zinc-400 mb-6" style={{ fontSize: '13px' }}>Kahramaa T10/T11 · IEC 60364 · Fault current · Cable optimisation</p>
@@ -162,9 +195,9 @@ export default function Dashboard() {
             </button>
           ) : (
             <div>
-              <p className="mono text-red-400 mb-4" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
-                ⚠ SUBSCRIPTION INACTIVE — SET UP BILLING BELOW TO RESTORE ACCESS
-              </p>
+              <div className="mono text-red-400 mb-4" style={{ fontSize: '11px', letterSpacing: '0.1em' }}>
+                ⚠ SUBSCRIPTION REQUIRED — ADD BILLING BELOW TO RESTORE ACCESS
+              </div>
             </div>
           )}
         </div>
@@ -172,39 +205,46 @@ export default function Dashboard() {
         {/* ── Subscription Status ── */}
         <div className="surface p-6">
           <div className="mono text-zinc-500 mb-4" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>SUBSCRIPTION STATUS</div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #1a1f27' }}>
+          <div className="space-y-0">
+
+            <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid #1a1f27' }}>
               <span className="text-zinc-400" style={{ fontSize: '14px' }}>Status</span>
-              <span className={`mono font-bold`} style={{
+              <span className="mono font-bold" style={{
                 fontSize: '11px', letterSpacing: '0.1em',
-                color: status === 'active' ? '#4ade80' : status === 'trialing' ? '#7ed3f7' : '#f87171'
+                color: status === 'active' ? '#4ade80'
+                  : isTrialing ? '#7ed3f7'
+                  : status === 'canceled' ? '#f87171'
+                  : status === 'past_due' ? '#fb923c'
+                  : '#f87171'
               }}>
-                {(status === 'trialing' || status === 'on_trial') ? 'FREE TRIAL' : status === 'active' ? 'ACTIVE' : status === 'canceled' ? 'CANCELED' : status === 'past_due' ? 'PAYMENT DUE' : 'INACTIVE'}
+                {isTrialing ? 'FREE TRIAL'
+                  : status === 'active' ? 'ACTIVE'
+                  : status === 'canceled' ? 'CANCELED'
+                  : status === 'past_due' ? 'PAYMENT DUE'
+                  : 'INACTIVE'}
               </span>
             </div>
 
-            {(status === 'trialing' || status === 'on_trial') && subscription?.trial_end && (
-              <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #1a1f27' }}>
-                <span className="text-zinc-400" style={{ fontSize: '14px' }}>Trial ends</span>
+            {isTrialing && subscription?.trial_end && (
+              <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid #1a1f27' }}>
+                <span className="text-zinc-400" style={{ fontSize: '14px' }}>Trial expires</span>
                 <span className="mono text-zinc-300" style={{ fontSize: '12px' }}>
                   {formatDate(subscription.trial_end)}
                   {trialDays !== null && (
-                    <span className={`ml-2 ${trialDays <= 7 ? 'text-amber-400' : 'text-zinc-500'}`}>
-                      ({trialDays}d left)
-                    </span>
+                    <span className="ml-2" style={{ color: trialColour }}>({trialDays}d left)</span>
                   )}
                 </span>
               </div>
             )}
 
-            {subscription?.subscription_end && (
-              <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid #1a1f27' }}>
+            {subscription?.subscription_end && !isTrialing && (
+              <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid #1a1f27' }}>
                 <span className="text-zinc-400" style={{ fontSize: '14px' }}>Next billing</span>
                 <span className="mono text-zinc-300" style={{ fontSize: '12px' }}>{formatDate(subscription.subscription_end)}</span>
               </div>
             )}
 
-            <div className="flex items-center justify-between py-2">
+            <div className="flex items-center justify-between py-3">
               <span className="text-zinc-400" style={{ fontSize: '14px' }}>Payment method</span>
               <span className="mono" style={{ fontSize: '11px', letterSpacing: '0.08em', color: hasBilling ? '#4ade80' : '#f87171' }}>
                 {hasBilling ? 'CONFIGURED ✓' : 'NOT SET UP'}
@@ -213,74 +253,65 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── Manage Subscription — show when already subscribed with billing ── */}
-        {hasBilling && isActive && (
-          <div className="surface p-6">
-            <div className="mono text-emerald-400 mb-1" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>MANAGE SUBSCRIPTION</div>
-            <p className="text-zinc-400 mb-5" style={{ fontSize: '13px', lineHeight: '1.6' }}>
-              Your subscription is active. To cancel, upgrade, or update your payment method, use the link in your LemonSqueezy receipt email, or contact support.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <a href="https://app.lemonsqueezy.com/billing" target="_blank" rel="noopener noreferrer"
-                className="mono text-cyan-300 hover:text-cyan-200 transition-colors"
-                style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none', border: '1px solid rgba(126,211,247,0.25)', padding: '8px 16px' }}>
-                BILLING PORTAL →
-              </a>
-              <a href="mailto:support@calcpilot.cc"
-                className="mono text-zinc-400 hover:text-white transition-colors"
-                style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none', border: '1px solid #1a1f27', padding: '8px 16px' }}>
-                EMAIL SUPPORT
-              </a>
+        {/* ── Upgrade / Reactivate — trial with no billing, or expired ── */}
+        {(needsUpgrade || needsReactivate) && (
+          <div id="upgrade-section" className="surface p-6" style={{ border: '1px solid rgba(126,211,247,0.15)' }}>
+            <div className="mono mb-1" style={{ fontSize: '10px', letterSpacing: '0.18em', color: '#7ed3f7' }}>
+              {needsReactivate ? 'REACTIVATE SUBSCRIPTION' : 'CHOOSE YOUR PLAN'}
             </div>
-          </div>
-        )}
-
-        {/* ── Billing Setup — show when no payment method OR subscription inactive ── */}
-        {(!hasBilling || !isActive) && (
-          <div className="surface p-6" style={{ border: '1px solid rgba(126,211,247,0.15)' }}>
-            <div className="mono text-cyan-400 mb-1" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>
-              {!isActive ? 'REACTIVATE SUBSCRIPTION' : 'SET UP BILLING'}
-            </div>
-            <p className="text-zinc-400 mb-5" style={{ fontSize: '13px', lineHeight: '1.6' }}>
-              {!isActive
+            <p className="text-zinc-400 mb-6" style={{ fontSize: '13px', lineHeight: '1.65' }}>
+              {needsReactivate
                 ? 'Your access has lapsed. Subscribe below to restore it immediately.'
-                : 'Your free trial is running. Add payment now — you won\'t be charged until the trial ends.'}
+                : 'Your free trial is running. Add a payment method now — you won\'t be charged until your trial ends on ' + formatDate(subscription?.trial_end) + '.'}
             </p>
 
             {/* Plan picker */}
             <div className="grid grid-cols-2 gap-3 mb-5">
+              {/* Monthly */}
               <button type="button" onClick={() => setPlan("monthly")}
-                className="p-4 text-left transition-all"
+                className="p-5 text-left transition-all"
                 style={{
-                  background: plan === 'monthly' ? 'linear-gradient(180deg,rgba(126,211,247,0.06),transparent),#0a0d12' : '#0a0d12',
+                  background: plan === 'monthly' ? 'linear-gradient(180deg,rgba(126,211,247,0.07),transparent),#0a0d12' : '#0a0d12',
                   border: plan === 'monthly' ? '1px solid #7ed3f7' : '1px solid #1a1f27',
+                  cursor: 'pointer',
                 }}>
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <span className="mono text-zinc-400" style={{ fontSize: '9px', letterSpacing: '0.15em' }}>STANDARD</span>
                   <span className="pill pill-info" style={{ fontSize: '9px' }}>MONTHLY</span>
                 </div>
-                <div className="display text-white" style={{ fontSize: '28px' }}>$12<span className="text-zinc-500" style={{ fontSize: '13px' }}>/mo</span></div>
+                <div className="display text-white" style={{ fontSize: '34px' }}>
+                  $12<span className="text-zinc-500" style={{ fontSize: '14px' }}>/mo</span>
+                </div>
+                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>BILLED MONTHLY</div>
               </button>
 
+              {/* Annual */}
               <button type="button" onClick={() => setPlan("annual")}
-                className="p-4 text-left transition-all relative"
+                className="p-5 text-left transition-all relative"
                 style={{
-                  background: plan === 'annual' ? 'linear-gradient(180deg,rgba(126,211,247,0.06),transparent),#0a0d12' : '#0a0d12',
+                  background: plan === 'annual' ? 'linear-gradient(180deg,rgba(126,211,247,0.07),transparent),#0a0d12' : '#0a0d12',
                   border: plan === 'annual' ? '1px solid #7ed3f7' : '1px solid #1a1f27',
+                  cursor: 'pointer',
                 }}>
-                <div className="absolute -top-2.5 right-3 mono font-bold bg-emerald-400 text-slate-950 px-2 py-0.5" style={{ fontSize: '8px', letterSpacing: '0.12em' }}>SAVE 65%</div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="absolute -top-3 right-4 mono font-bold bg-emerald-400 text-slate-950 px-2 py-0.5"
+                     style={{ fontSize: '8px', letterSpacing: '0.12em' }}>SAVE 65%</div>
+                <div className="flex items-center justify-between mb-3">
                   <span className="mono text-zinc-400" style={{ fontSize: '9px', letterSpacing: '0.15em' }}>STANDARD</span>
                   <span className="pill pill-pass" style={{ fontSize: '9px' }}>ANNUAL</span>
                 </div>
-                <div className="display text-white" style={{ fontSize: '28px' }}>$50<span className="text-zinc-500" style={{ fontSize: '13px' }}>/yr</span></div>
+                <div className="display text-white" style={{ fontSize: '34px' }}>
+                  $50<span className="text-zinc-500" style={{ fontSize: '14px' }}>/yr</span>
+                </div>
+                <div className="mono text-zinc-500 mt-1" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>~$4.17 / MO EFFECTIVE</div>
               </button>
             </div>
 
-            <div className="mt-2 flex items-center gap-2 mono text-zinc-500 mb-5" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
-              1 MONTH FREE TRIAL INCLUDED · NO CHARGE TODAY · CANCEL ANYTIME
-            </div>
+            {needsUpgrade && (
+              <div className="flex items-center gap-2 mono text-zinc-500 mb-5" style={{ fontSize: '10px', letterSpacing: '0.1em' }}>
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 flex-shrink-0"></span>
+                NO CHARGE UNTIL TRIAL ENDS · CANCEL ANYTIME
+              </div>
+            )}
 
             {checkoutError && (
               <div className="mono px-4 py-3 mb-4" style={{ background: 'rgba(248,81,73,0.08)', border: '1px solid rgba(248,81,73,0.3)', color: '#ff8a8a', fontSize: '12px' }}>
@@ -290,12 +321,34 @@ export default function Dashboard() {
 
             <button onClick={handleSubscribe} disabled={checkoutLoading} className="btn-primary w-full"
               style={{ opacity: checkoutLoading ? 0.6 : 1, cursor: checkoutLoading ? 'not-allowed' : 'pointer' }}>
-              {checkoutLoading ? "OPENING CHECKOUT..." : "SUBSCRIBE NOW →"}
+              {checkoutLoading ? "OPENING CHECKOUT..." : needsReactivate ? "REACTIVATE →" : "ADD PAYMENT METHOD →"}
             </button>
           </div>
         )}
 
-        {/* Support */}
+        {/* ── Manage Subscription — only for paying subscribers ── */}
+        {hasBilling && isActive && (
+          <div className="surface p-6">
+            <div className="mono text-emerald-400 mb-1" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>MANAGE SUBSCRIPTION</div>
+            <p className="text-zinc-400 mb-4" style={{ fontSize: '13px', lineHeight: '1.6' }}>
+              To cancel, upgrade, or update your payment method, visit your billing portal or contact support.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <a href="https://app.lemonsqueezy.com/billing" target="_blank" rel="noopener noreferrer"
+                className="mono transition-colors"
+                style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none', color: '#7ed3f7', border: '1px solid rgba(126,211,247,0.25)', padding: '8px 16px', display: 'inline-block' }}>
+                BILLING PORTAL →
+              </a>
+              <a href="mailto:support@calcpilot.cc"
+                className="mono text-zinc-400 hover:text-white transition-colors"
+                style={{ fontSize: '11px', letterSpacing: '0.1em', textDecoration: 'none', border: '1px solid #1a1f27', padding: '8px 16px', display: 'inline-block' }}>
+                EMAIL SUPPORT
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* ── Support ── */}
         <div className="surface p-6">
           <div className="mono text-zinc-500 mb-2" style={{ fontSize: '10px', letterSpacing: '0.18em' }}>SUPPORT</div>
           <p className="text-zinc-400" style={{ fontSize: '13px' }}>
